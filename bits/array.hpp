@@ -102,6 +102,20 @@ template <class T, std::size_t N> struct array {
 
 template <class T, class... U> array(T, U...) -> array<T, 1 + sizeof...(U)>;
 
+template <class T, std::size_t N>
+constexpr void swap(mystd::array<T, N> &lhs,
+                    mystd::array<T, N> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
+  lhs.swap(rhs);
+}
+
+template <class T, std::size_t N>
+struct tuple_size<mystd::array<T, N>> : integral_constant<std::size_t, N> {};
+
+template <std::size_t I, class T, std::size_t N>
+struct tuple_element<I, mystd::array<T, N>> {
+  using type = T;
+};
+
 } // namespace mystd
 
 template <class T, std::size_t N>
@@ -150,21 +164,3 @@ constexpr mystd::array<std::remove_cv_t<T>, N> to_array(T (&&arr)[N]) {
     return mystd::array<std::remove_cv_t<T>, N>{std::move(arr[I])...};
   }(std::make_index_sequence<N>{});
 }
-
-namespace mystd {
-
-template <class T, std::size_t N>
-constexpr void swap(mystd::array<T, N> &lhs,
-                    mystd::array<T, N> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
-  lhs.swap(rhs);
-}
-
-template <class T, std::size_t N>
-struct tuple_size<mystd::array<T, N>> : integral_constant<std::size_t, N> {};
-
-template <std::size_t I, class T, std::size_t N>
-struct tuple_element<I, mystd::array<T, N>> {
-  using type = T;
-};
-
-} // namespace mystd

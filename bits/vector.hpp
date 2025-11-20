@@ -930,10 +930,6 @@ template <class InputIt,
 vector(InputIt, InputIt, Allocator = Allocator())
     -> vector<typename std::iterator_traits<InputIt>::value_type, Allocator>;
 
-namespace pmr {
-template <class T> using vector = vector<T, std::pmr::polymorphic_allocator<T>>;
-}
-
 template <class T, class Allocator>
 constexpr void
 swap(mystd::vector<T, Allocator> &lhs,

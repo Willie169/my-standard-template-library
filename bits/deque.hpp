@@ -1122,11 +1122,6 @@ template <class InputIt,
 deque(InputIt, InputIt, Alloc = Alloc())
     -> deque<typename std::iterator_traits<InputIt>::value_type, Alloc>;
 
-namespace pmr {
-template <class T>
-using deque = mystd::deque<T, std::pmr::polymorphic_allocator<T>>;
-}
-
 template <class T, class Alloc>
 constexpr void
 swap(mystd::deque<T, Alloc> &lhs,
