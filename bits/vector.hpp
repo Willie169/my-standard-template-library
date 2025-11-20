@@ -59,7 +59,7 @@ private:
 
   constexpr void destroy_deallocate() {
     if (elems) {
-      if constexpr (!std::is_trivially_copyable_v<T>)
+      if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = 0; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       mystd::allocator_traits<Allocator>::deallocate(alloc, elems, cap);
@@ -265,7 +265,7 @@ public:
 
   constexpr ~vector() {
     if (elems) {
-      if constexpr (!std::is_trivially_copyable_v<T>)
+      if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = 0; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       mystd::allocator_traits<Allocator>::deallocate(alloc, elems, cap);
@@ -290,7 +290,7 @@ public:
           destroy_deallocate();
         elems = mystd::allocator_traits<Allocator>::allocate(alloc, other.sz);
         cap = other.sz;
-      } else if constexpr (!std::is_trivially_copyable_v<T>)
+      } else if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = other.sz; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       if constexpr (std::is_trivially_copyable_v<T>)
@@ -351,7 +351,7 @@ public:
             destroy_deallocate();
           elems = mystd::allocator_traits<Allocator>::allocate(alloc, other.sz);
           cap = other.sz;
-        } else if constexpr (!std::is_trivially_copyable_v<T>)
+        } else if constexpr (!std::is_trivially_destructible_v<T>)
           for (std::size_t i = other.sz; i < sz; ++i)
             mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
         if constexpr (std::is_trivially_copyable_v<T>)
@@ -594,7 +594,7 @@ public:
   }
 
   constexpr void clear() noexcept {
-    if constexpr (!std::is_trivially_copyable_v<T>)
+    if constexpr (!std::is_trivially_destructible_v<T>)
       for (std::size_t i = 0; i < sz; ++i)
         mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
     sz = 0;
@@ -876,7 +876,7 @@ public:
   constexpr void pop_back() {
     if (sz > 0) {
       --sz;
-      if constexpr (!std::is_trivially_copyable_v<T>)
+      if constexpr (!std::is_trivially_destructible_v<T>)
         mystd::allocator_traits<Allocator>::destroy(alloc, elems + sz);
     }
   }
@@ -885,14 +885,12 @@ public:
     if (new_size > cap)
       reserve(new_size);
     if (new_size < sz) {
-      if constexpr (!std::is_trivially_copyable_v<T>)
+      if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = new_size; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       sz = new_size;
     } else if (new_size > sz) {
       if constexpr (std::is_trivially_copyable_v<T>) {
-        // For trivially copyable types, we can use memset for default initialization
-        // but only if T is trivially default constructible
         if constexpr (std::is_trivially_default_constructible_v<T>) {
           std::memset(elems + sz, 0, (new_size - sz) * sizeof(T));
         } else {
@@ -911,7 +909,7 @@ public:
     if (new_size > cap)
       reserve(new_size);
     if (new_size < sz) {
-      if constexpr (!std::is_trivially_copyable_v<T>)
+      if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = new_size; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       sz = new_size;
@@ -920,7 +918,8 @@ public:
         std::fill_n(elems + sz, new_size - sz, value);
       } else {
         for (std::size_t i = sz; i < new_size; ++i)
-          mystd::allocator_traits<Allocator>::construct(alloc, elems + i, value);
+          mystd::allocator_traits<Allocator>::construct(alloc, elems + i,
+                                                        value);
       }
       sz = new_size;
     }

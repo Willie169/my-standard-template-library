@@ -44,27 +44,29 @@ constexpr OutputIt copy_if(InputIt first, InputIt last, OutputIt d_first,
   return d_first;
 }
 
-template<class BidirIt1, class BidirIt2>
-constexpr BidirIt2 copy_backward(BidirIt1 first, BidirIt1 last, BidirIt2 d_last) {
-    using ValueType1 = typename std::iterator_traits<BidirIt1>::value_type;
-    using ValueType2 = typename std::iterator_traits<BidirIt2>::value_type;
-    if constexpr (std::contiguous_iterator<BidirIt1> &&
-                  std::contiguous_iterator<BidirIt2> &&
-                  std::is_trivially_copyable_v<ValueType1> &&
-                  std::is_same_v<ValueType1, ValueType2>) {
-        auto n = last - first;
-        if (n > 0) {
-            std::memmove(std::addressof(*d_last) - n, std::addressof(*first), n * sizeof(ValueType1));
-        }
-        return d_last - n;
-    } else {
-        while (first != last) {
-            --last;
-            --d_last;
-            *d_last = *last;
-        }
-        return d_last;
+template <class BidirIt1, class BidirIt2>
+constexpr BidirIt2 copy_backward(BidirIt1 first, BidirIt1 last,
+                                 BidirIt2 d_last) {
+  using ValueType1 = typename std::iterator_traits<BidirIt1>::value_type;
+  using ValueType2 = typename std::iterator_traits<BidirIt2>::value_type;
+  if constexpr (std::contiguous_iterator<BidirIt1> &&
+                std::contiguous_iterator<BidirIt2> &&
+                std::is_trivially_copyable_v<ValueType1> &&
+                std::is_same_v<ValueType1, ValueType2>) {
+    auto n = last - first;
+    if (n > 0) {
+      std::memmove(std::addressof(*d_last) - n, std::addressof(*first),
+                   n * sizeof(ValueType1));
     }
+    return d_last - n;
+  } else {
+    while (first != last) {
+      --last;
+      --d_last;
+      *d_last = *last;
+    }
+    return d_last;
+  }
 }
 
 } // namespace mystd
