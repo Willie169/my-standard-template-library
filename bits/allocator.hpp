@@ -278,16 +278,29 @@ public:
   }
 };
 
-static pointer allocate(Alloc &a, size_type n) {
-  mystd::allocator_traits<a>::allocate(n);
+template<class Alloc>
+static typename mystd::allocator_traits<Alloc>::pointer
+allocate(Alloc& a, typename mystd::allocator_traits<Alloc>::size_type n)
+{
+    return mystd::allocator_traits<Alloc>::allocate(a, n);
 }
 
-static pointer allocate(Alloc &a, size_type n, const_void_pointer hint) {
-  mystd::allocator_traits<a>::allocate(n, hint);
+template<class Alloc>
+static typename mystd::allocator_traits<Alloc>::pointer
+allocate(Alloc& a,
+         typename mystd::allocator_traits<Alloc>::size_type n,
+         typename mystd::allocator_traits<Alloc>::const_void_pointer hint)
+{
+    return mystd::allocator_traits<Alloc>::allocate(a, n, hint);
 }
 
-static constexpr void deallocate(Alloc &a, pointer p, size_type n) {
-  mystd::allocator_traits<a>::deallocate(p, n);
+template<class Alloc>
+static constexpr void
+deallocate(Alloc& a,
+           typename mystd::allocator_traits<Alloc>::pointer p,
+           typename mystd::allocator_traits<Alloc>::size_type n)
+{
+    mystd::allocator_traits<Alloc>::deallocate(a, p, n);
 }
 
 template <class T, class Alloc, class = void>

@@ -19,9 +19,9 @@ constexpr void swap(T &a,
 template <class T, std::size_t N>
   requires std::is_swappable_v<T>
 constexpr void swap(T (&a)[N],
-                    T (&b)[N]) noexcept(noexcept(my_std::swap(a[0], b[0]))) {
+                    T (&b)[N]) noexcept(noexcept(mystd::swap(a[0], b[0]))) {
   for (std::size_t i = 0; i < N; ++i) {
-    my_std::swap(a[i], b[i]);
+    mystd::swap(a[i], b[i]);
   }
 }
 

@@ -4,7 +4,9 @@
 
 namespace mystd {
 
-template <std::input_iterator InputIt, std::output_iterator OutputIt>
+template <std::input_iterator InputIt,
+          std::weakly_incrementable OutputIt>
+requires std::indirectly_writable<OutputIt, std::iter_value_t<InputIt>>
 constexpr OutputIt copy(InputIt first, InputIt last, OutputIt d_first) {
   if constexpr (std::contiguous_iterator<InputIt> &&
                 std::contiguous_iterator<OutputIt> &&
@@ -30,8 +32,10 @@ constexpr OutputIt copy(InputIt first, InputIt last, OutputIt d_first) {
   return d_first;
 }
 
-template <std::input_iterator InputIt, std::output_iterator OutputIt,
+template <std::input_iterator InputIt,
+          std::weakly_incrementable OutputIt,
           typename UnaryPred>
+requires std::indirectly_writable<OutputIt, std::iter_value_t<InputIt>>
 constexpr OutputIt copy_if(InputIt first, InputIt last, OutputIt d_first,
                            UnaryPred pred) {
   while (first != last) {
@@ -44,7 +48,7 @@ constexpr OutputIt copy_if(InputIt first, InputIt last, OutputIt d_first,
   return d_first;
 }
 
-template <class BidirIt1, class BidirIt2>
+template <std::bidirectional_iterator BidirIt1, std::bidirectional_iterator BidirIt2>
 constexpr BidirIt2 copy_backward(BidirIt1 first, BidirIt1 last,
                                  BidirIt2 d_last) {
   using ValueType1 = typename std::iterator_traits<BidirIt1>::value_type;
