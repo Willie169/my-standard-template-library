@@ -53,8 +53,7 @@ private:
       mystd::allocator_traits<Allocator>::deallocate(alloc, elems, cap);
       elems = nullptr;
     }
-    cap = 0;
-    sz = 0;
+    sz = cap = 0;
   }
 
   constexpr void destroy_deallocate() {
@@ -369,7 +368,6 @@ public:
           }
         }
         sz = other.sz;
-        other.~vector();
       }
     }
     return *this;
@@ -609,8 +607,7 @@ public:
         mystd::allocator_traits<Allocator>::construct(alloc, elems + i);
       }
       sz = index;
-    }
-    if (sz == cap)
+    } else if (sz >= cap)
       reserve(sz ? sz * _MYSTD_VECTOR_GROW : 1);
     if (index < sz) {
       if constexpr (std::is_trivially_copyable_v<T>) {
@@ -642,7 +639,7 @@ public:
       }
       sz = index;
     }
-    if (sz == cap)
+    if (sz >= cap)
       reserve(sz ? sz * _MYSTD_VECTOR_GROW : 1);
     if (index < sz) {
       if constexpr (std::is_trivially_copyable_v<T>) {
@@ -774,8 +771,7 @@ public:
         mystd::allocator_traits<Allocator>::construct(alloc, elems + i);
       }
       sz = index;
-    }
-    if (sz == cap)
+    } else if (sz >= cap)
       reserve(sz ? sz * _MYSTD_VECTOR_GROW : 1);
     if (index == sz) {
       if constexpr (std::is_trivially_move_constructible_v<T>)
@@ -840,7 +836,7 @@ public:
   }
 
   constexpr void push_back(const T &value) {
-    if (sz == cap)
+    if (sz >= cap)
       reserve(sz ? sz * _MYSTD_VECTOR_GROW : 1);
     if constexpr (std::is_trivially_copyable_v<T>)
       elems[sz++] = value;
@@ -851,7 +847,7 @@ public:
   }
 
   constexpr void push_back(T &&value) {
-    if (sz == cap)
+    if (sz >= cap)
       reserve(sz ? sz * _MYSTD_VECTOR_GROW : 1);
     if constexpr (std::is_trivially_move_constructible_v<T>)
       elems[sz++] = std::move(value);
@@ -863,7 +859,7 @@ public:
   }
 
   template <class Arg> constexpr T &emplace_back(Arg &&arg) {
-    if (sz == cap)
+    if (sz >= cap)
       reserve(sz ? sz * _MYSTD_VECTOR_GROW : 1);
     if constexpr (std::is_trivially_move_constructible_v<T>)
       elems[sz] = T(std::forward<Arg>(arg));
@@ -882,21 +878,18 @@ public:
   }
 
   constexpr void resize(std::size_t new_size) {
-    if (new_size > cap)
-      reserve(new_size);
     if (new_size < sz) {
       if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = new_size; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       sz = new_size;
-    } else if (new_size > sz) {
-      if constexpr (std::is_trivially_copyable_v<T>) {
-        if constexpr (std::is_trivially_default_constructible_v<T>) {
-          std::memset(elems + sz, 0, (new_size - sz) * sizeof(T));
-        } else {
-          for (std::size_t i = sz; i < new_size; ++i)
-            mystd::allocator_traits<Allocator>::construct(alloc, elems + i);
-        }
+      return;
+    }
+    if (new_size > cap)
+      reserve(new_size);
+    if (new_size > sz) {
+      if constexpr (std::is_trivially_default_constructible_v<T>) {
+        std::uninitialized_default_construct(elems + sz, elems + new_size);
       } else {
         for (std::size_t i = sz; i < new_size; ++i)
           mystd::allocator_traits<Allocator>::construct(alloc, elems + i);
@@ -906,16 +899,18 @@ public:
   }
 
   constexpr void resize(std::size_t new_size, const T &value) {
-    if (new_size > cap)
-      reserve(new_size);
     if (new_size < sz) {
       if constexpr (!std::is_trivially_destructible_v<T>)
         for (std::size_t i = new_size; i < sz; ++i)
           mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
       sz = new_size;
-    } else if (new_size > sz) {
-      if constexpr (std::is_trivially_copyable_v<T>) {
-        std::fill_n(elems + sz, new_size - sz, value);
+      return;
+    }
+    if (new_size > cap)
+      reserve(new_size);
+    if (new_size > sz) {
+      if constexpr (std::is_trivially_default_constructible_v<T>) {
+        std::uninitialized_fill(elems + sz, elems + new_size, value);
       } else {
         for (std::size_t i = sz; i < new_size; ++i)
           mystd::allocator_traits<Allocator>::construct(alloc, elems + i,
