@@ -1,4 +1,4 @@
-#pragma once
+#pragma once // deque.hpp
 
 #ifndef _MYSTD_DEQUE_GROW
 #define _MYSTD_DEQUE_GROW 2
@@ -181,6 +181,41 @@ private:
   const std::size_t per_block =
       (_MYSTD_DEQUE_BLOCK_SIZE + sizeof(T) - 1) / sizeof(T);
 
+  template <bool UseMove, typename InputIt>
+  constexpr void transfer_blocks(InputIt src_start, InputIt src_end, 
+                                T** dest_blocks, size_type dest_start_idx) {
+    if constexpr (std::is_trivially_copyable_v<T>) {
+      auto src_it = src_start;
+      for (size_type i = 0; i < (src_end - src_start); ++i) {
+        std::size_t block_count = (i == (src_end - src_start) - 1) 
+            ? (sz - ((src_end - src_start) - 1) * per_block)
+            : per_block;
+        std::memcpy(dest_blocks[dest_start_idx + i], 
+                   src_it[i], block_count * sizeof(T));
+      }
+    } else {
+      auto src_it = src_start;
+      for (size_type block_idx = 0; block_idx < (src_end - src_start); ++block_idx) {
+        std::size_t block_count = (block_idx == (src_end - src_start) - 1) 
+            ? (sz - ((src_end - src_start) - 1) * per_block)
+            : per_block;
+        
+        T* dest_block = dest_blocks[dest_start_idx + block_idx];
+        T* src_block = src_it[block_idx];
+        
+        for (size_type elem_idx = 0; elem_idx < block_count; ++elem_idx) {
+          if constexpr (UseMove) {
+            mystd::allocator_traits<Allocator>::construct(
+                alloc, dest_block + elem_idx, std::move(src_block[elem_idx]));
+          } else {
+            mystd::allocator_traits<Allocator>::construct(
+                alloc, dest_block + elem_idx, src_block[elem_idx]);
+          }
+        }
+      }
+    }
+  }
+
   constexpr void deallocate() {
     if (map) {
       for (std::size_t i = 0; i < map_size; ++i)
@@ -212,6 +247,14 @@ private:
     sz = 0;
   }
 
+  constexpr void destroy_range(iterator first, iterator last) {
+    if constexpr (!std::is_trivially_destructible_v<T>) {
+      for (iterator it = first; it != last; ++it) {
+        mystd::allocator_traits<Allocator>::destroy(alloc, &*it);
+      }
+    }
+  }
+
   constexpr void allocate_block(T **block_ptr) {
     *block_ptr = mystd::allocator_traits<Allocator>::allocate(alloc, per_block);
   }
@@ -233,7 +276,7 @@ private:
     }
     if (map) {
       ::operator delete(map);
-    }
+    }    
     map = new_map;
     map_size = new_map_size;
     start = iterator(map + new_start_idx,
@@ -261,53 +304,48 @@ private:
       map_size = _MYSTD_DEQUE_MIN_MAP_SIZE;
       map = static_cast<T **>(::operator new(map_size * sizeof(T *)));
       std::size_t mid = map_size / 2;
-      std::fill(map, map + map_size, nullptr);
+      for (std::size_t i = 0; i < map_size; ++i)
+        map[i] = nullptr;
       allocate_block(&map[mid]);
       start = finish = iterator(map + mid, map[mid]);
     }
   }
 
-  template <bool Move = false>
+  template <bool UseMove = false>
+  constexpr iterator insert_blocks_optimized(const_iterator pos, size_type count,
+                                            const T &value) {
+    difference_type index = pos - start;
+    size_type old_size = sz;
+    for (size_type i = 0; i < count; ++i) {
+      if constexpr (UseMove) {
+        push_back(std::move(const_cast<T &>(value)));
+      } else {
+        push_back(value);
+      }
+    }
+    iterator new_start = start + index;
+    iterator new_finish = finish;
+    mystd::rotate(new_start, finish - count, finish);
+    return new_start;
+  }
+
+  template <bool UseMove = false>
   constexpr iterator insert_impl(const_iterator pos, size_type count,
                                  const T &value) {
     if (count == 0)
       return iterator(const_cast<T **>(pos.block), const_cast<T *>(pos.cur));
     difference_type index = pos - start;
     if (index < 0 || static_cast<size_type>(index) > sz) {
-      throw std::out_of_range("deque::insert");
-    }
-    if (static_cast<size_type>(index) == sz) {
-      for (size_type i = 0; i < count; ++i) {
-        if constexpr (Move) {
-          push_back(std::move(const_cast<T &>(value)));
-        } else {
-          push_back(value);
-        }
-      }
-      return finish - count;
+      throw std::out_of_range("deque");
     }
     if (count > per_block / 2) {
-      return insert_blocks(pos, count, value);
+      return insert_blocks_optimized<UseMove>(pos, count, value);
     }
+    iterator result = start + index;
     for (size_type i = 0; i < count; ++i) {
       insert(start + index + i, value);
     }
-    return start + index;
-  }
-
-  constexpr iterator insert_blocks(const_iterator pos, size_type count,
-                                   const T &value) {
-    difference_type index = pos - start;
-    size_type old_size = sz;
-
-    for (size_type i = 0; i < count; ++i) {
-      push_back(value);
-    }
-
-    iterator new_start = start + index;
-    iterator new_finish = finish;
-    mystd::rotate(new_start, finish - count, finish);
-    return new_start;
+    return result;
   }
 
   template <std::input_iterator InputIt>
@@ -329,33 +367,56 @@ private:
     if (dist <= 0)
       return iterator(const_cast<T **>(pos.block), const_cast<T *>(pos.cur));
     difference_type index = pos - start;
-
     if (static_cast<size_type>(dist) > per_block) {
-
       for (difference_type i = 0; i < dist; ++i) {
         emplace_back();
       }
-
       iterator insert_pos = start + index;
       iterator old_end = finish - dist;
       if (insert_pos != old_end) {
-
         if constexpr (std::is_trivially_copyable_v<T>) {
-          std::memmove(insert_pos.cur + dist, insert_pos.cur,
+          std::memmove(&*(insert_pos + dist), &*insert_pos,
                        (old_end - insert_pos) * sizeof(T));
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move_backward(insert_pos, old_end, finish);
         } else {
           mystd::copy_backward(insert_pos, old_end, finish);
         }
       }
-
-      mystd::copy(first, last, insert_pos);
+      if constexpr (std::is_trivially_copyable_v<T>) {
+        if constexpr (std::contiguous_iterator<ForwardIt>) {
+          std::memcpy(&*insert_pos, &*first, dist * sizeof(T));
+        } else {
+          mystd::copy(first, last, insert_pos);
+        }
+      } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+        mystd::move(first, last, insert_pos);
+      } else {
+        mystd::copy(first, last, insert_pos);
+      }
       return insert_pos;
     }
-
-    for (; first != last; ++first, ++index) {
-      insert(start + index, *first);
+    iterator result = start + index;
+    for (; first != last; ++first, ++result) {
+      insert(result, *first);
     }
-    return start + (pos - start);
+    return start + index;
+  }
+
+  template <bool UseMove>
+  constexpr void transfer_elements(iterator dest, iterator src, size_type count) {
+    if constexpr (std::is_trivially_copyable_v<T>) {
+      std::memcpy(&*dest, &*src, count * sizeof(T));
+    } else {
+      for (size_type i = 0; i < count; ++i, ++dest, ++src) {
+        if constexpr (UseMove) {
+          mystd::allocator_traits<Allocator>::construct(
+              alloc, &*dest, std::move(*src));
+        } else {
+          mystd::allocator_traits<Allocator>::construct(alloc, &*dest, *src);
+        }
+      }
+    }
   }
 
 public:
@@ -400,8 +461,7 @@ public:
         for (; it != finish; ++it)
           mystd::allocator_traits<Allocator>::construct(alloc, &*it);
       } catch (...) {
-        for (pointer i = start.cur; i != it.cur; ++i)
-          mystd::allocator_traits<Allocator>::destroy(alloc, i);
+        destroy_range(start, it);
         deallocate();
         throw;
       }
@@ -438,9 +498,7 @@ public:
                           (count - (num_blocks - 1) * per_block));
     iterator it = start;
     try {
-      if constexpr (std::is_trivially_copyable_v<T> &&
-                    std::is_trivially_constructible_v<T>) {
-
+      if constexpr (std::is_trivially_copyable_v<T>) {
         for (std::size_t i = 0; i < num_blocks; ++i) {
           std::size_t block_count = (i == num_blocks - 1)
                                         ? (count - (num_blocks - 1) * per_block)
@@ -452,8 +510,7 @@ public:
           mystd::allocator_traits<Allocator>::construct(alloc, &*it, value);
       }
     } catch (...) {
-      for (pointer i = start.cur; i != it.cur; ++i)
-        mystd::allocator_traits<Allocator>::destroy(alloc, i);
+      destroy_range(start, it);
       deallocate();
       throw;
     }
@@ -493,7 +550,6 @@ public:
       try {
         if constexpr (std::contiguous_iterator<InputIt> &&
                       std::is_trivially_copyable_v<T>) {
-
           auto *src = std::to_address(first);
           for (std::size_t i = 0; i < num_blocks; ++i) {
             std::size_t block_count =
@@ -507,8 +563,7 @@ public:
             mystd::allocator_traits<Allocator>::construct(alloc, &*it, *first);
         }
       } catch (...) {
-        for (pointer i = start.cur; i != it.cur; ++i)
-          mystd::allocator_traits<Allocator>::destroy(alloc, i);
+        destroy_range(start, it);
         deallocate();
         throw;
       }
@@ -548,7 +603,6 @@ public:
     const_iterator oit = other.start;
     try {
       if constexpr (std::is_trivially_copyable_v<T>) {
-
         for (std::size_t i = 0; i < num_blocks; ++i) {
           std::size_t block_count =
               (i == num_blocks - 1) ? (other.sz - (num_blocks - 1) * per_block)
@@ -562,8 +616,7 @@ public:
           mystd::allocator_traits<Allocator>::construct(alloc, &*it, *oit);
       }
     } catch (...) {
-      for (pointer i = start.cur; i != it.cur; ++i)
-        mystd::allocator_traits<Allocator>::destroy(alloc, i);
+      destroy_range(start, it);
       deallocate();
       throw;
     }
@@ -619,8 +672,7 @@ public:
           mystd::allocator_traits<Allocator>::construct(alloc, &*it, *oit);
       }
     } catch (...) {
-      for (pointer i = start.cur; i != it.cur; ++i)
-        mystd::allocator_traits<Allocator>::destroy(alloc, i);
+      destroy_range(start, it);
       deallocate();
       throw;
     }
@@ -675,14 +727,16 @@ public:
                         other.map[oit.block - other.map + i],
                         block_count * sizeof(T));
           }
-        } else {
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
           for (; oit != other.finish; ++it, ++oit)
             mystd::allocator_traits<Allocator>::construct(alloc, &*it,
                                                           std::move(*oit));
+        } else {
+          for (; oit != other.finish; ++it, ++oit)
+            mystd::allocator_traits<Allocator>::construct(alloc, &*it, *oit);
         }
       } catch (...) {
-        for (pointer i = start.cur; i != it.cur; ++i)
-          mystd::allocator_traits<Allocator>::destroy(alloc, i);
+        destroy_range(start, it);
         deallocate();
         throw;
       }
@@ -729,8 +783,17 @@ public:
         other.sz = 0;
         other.start = other.finish = iterator();
       } else {
-        assign(std::make_move_iterator(other.start),
-               std::make_move_iterator(other.finish));
+        clear();
+        reserve(other.sz);
+        if constexpr (std::is_trivially_copyable_v<T>) {
+          std::memcpy(&*start, &*other.start, other.sz * sizeof(T));
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move(other.start, other.finish, start);
+        } else {
+          mystd::copy(other.start, other.finish, start);
+        }
+        sz = other.sz;
+        finish = start + sz;
       }
     }
     return *this;
@@ -745,7 +808,6 @@ public:
     clear();
     if (count > 0) {
       if constexpr (std::is_trivially_copyable_v<T>) {
-
         reserve(count);
         std::fill_n(start.cur, count, value);
         finish = start + count;
@@ -764,7 +826,17 @@ public:
       std::size_t count = static_cast<std::size_t>(std::distance(first, last));
       if (count > 0) {
         reserve(count);
-        mystd::copy(first, last, start);
+        if constexpr (std::is_trivially_copyable_v<T>) {
+          if constexpr (std::contiguous_iterator<InputIt>) {
+            std::memcpy(&*start, &*first, count * sizeof(T));
+          } else {
+            mystd::copy(first, last, start);
+          }
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move(first, last, start);
+        } else {
+          mystd::copy(first, last, start);
+        }
         finish = start + count;
         sz = count;
       }
@@ -851,9 +923,11 @@ public:
 
   constexpr void reserve(size_type new_cap) {
     if (new_cap > max_size())
-      throw std::length_error("deque::reserve");
+      throw std::length_error("deque");
     if (new_cap <= sz)
       return;
+    std::size_t additional_blocks = (new_cap - sz + per_block - 1) / per_block;
+    reserve_map_at_back(additional_blocks);
   }
 
   constexpr void shrink_to_fit() {
@@ -861,8 +935,9 @@ public:
     if (new_map_size == map_size)
       return;
     T **new_map = static_cast<T **>(::operator new(new_map_size * sizeof(T *)));
-    mystd::copy(start.block, finish.block + 1, new_map);
-
+    for (std::size_t i = 0; i < new_map_size; ++i) {
+      new_map[i] = map[start.block - map + i];
+    }
     for (std::size_t i = 0; i < map_size; ++i) {
       if (i < static_cast<std::size_t>(start.block - map) ||
           i > static_cast<std::size_t>(finish.block - map)) {
@@ -881,10 +956,7 @@ public:
   }
 
   constexpr void clear() noexcept {
-    if constexpr (!std::is_trivially_destructible_v<T>) {
-      for (pointer i = start.cur; i != finish.cur; ++i)
-        mystd::allocator_traits<Allocator>::destroy(alloc, i);
-    }
+    destroy_range(start, finish);
     sz = 0;
     if (map && map_size > 0) {
       std::size_t mid = map_size / 2;
@@ -904,7 +976,7 @@ public:
 
   constexpr iterator insert(const_iterator pos, size_type count,
                             const T &value) {
-    return insert_impl(pos, count, value);
+    return insert_impl<false>(pos, count, value);
   }
 
   template <std::input_iterator InputIt>
@@ -938,6 +1010,8 @@ public:
         iterator pos_iter = start + index;
         if constexpr (std::is_trivially_copyable_v<T>) {
           std::memmove(&*old_start, &*(old_start + 1), (index - 1) * sizeof(T));
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move(old_start + 1, pos_iter + 1, old_start);
         } else {
           mystd::copy(old_start + 1, pos_iter + 1, old_start);
         }
@@ -949,6 +1023,8 @@ public:
         if constexpr (std::is_trivially_copyable_v<T>) {
           std::memmove(&*(pos_iter + 1), &*pos_iter,
                        (sz - index - 1) * sizeof(T));
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move_backward(pos_iter, finish - 2, finish - 1);
         } else {
           mystd::copy_backward(pos_iter, finish - 2, finish - 1);
         }
@@ -966,29 +1042,28 @@ public:
                       const_cast<T *>(first.cur));
     difference_type n = last - first;
     difference_type elems_before = first - start;
+    destroy_range(iterator(const_cast<T**>(first.block), const_cast<T*>(first.cur)),
+                  iterator(const_cast<T**>(last.block), const_cast<T*>(last.cur)));
     if (static_cast<size_type>(elems_before) < (sz - n) / 2) {
-
       if (elems_before > 0) {
         if constexpr (std::is_trivially_copyable_v<T>) {
           std::memmove(&*(start + n), &*start, elems_before * sizeof(T));
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move_backward(start, start + elems_before, start + elems_before + n);
         } else {
-          mystd::copy_backward(start, start + elems_before,
-                               start + elems_before + n);
-          for (std::size_t i = 0; i < n; ++i)
-            mystd::allocator_traits<Allocator>::destroy(alloc, start.cur + i);
+          mystd::copy_backward(start, start + elems_before, start + elems_before + n);
         }
       }
       start += n;
     } else {
-
       if (sz - elems_before - n > 0) {
         if constexpr (std::is_trivially_copyable_v<T>) {
           std::memmove(&*(start + elems_before), &*last,
                        (sz - elems_before - n) * sizeof(T));
+        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          mystd::move(start + elems_before + n, finish, start + elems_before);
         } else {
           mystd::copy(start + elems_before + n, finish, start + elems_before);
-          for (std::size_t i = n; i > 0; --i)
-            mystd::allocator_traits<Allocator>::destroy(alloc, finish.cur - i);
         }
       }
       finish -= n;
@@ -1081,8 +1156,7 @@ public:
           emplace_back();
         }
       } else {
-        throw std::logic_error(
-            "deque::resize: T must be default constructible");
+        throw std::logic_error("deque");
       }
     } else if (count < sz) {
       for (size_type i = count; i < sz; ++i) {

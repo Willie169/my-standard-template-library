@@ -882,9 +882,11 @@ public:
     if (new_size > sz) {
       if constexpr (std::is_trivially_default_constructible_v<T>) {
         std::uninitialized_default_construct(elems + sz, elems + new_size);
-      } else {
+      } else if constexpr (std::is_default_constructible_v<T>) {
         for (std::size_t i = sz; i < new_size; ++i)
           mystd::allocator_traits<Allocator>::construct(alloc, elems + i);
+      } else {
+        throw std::logic_error("vector");
       }
       sz = new_size;
     }
