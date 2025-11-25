@@ -68,7 +68,7 @@ private:
   }
 
   template <bool UseMove>
-  constexpr void transfer_elements(T* new_elems, std::size_t count) {
+  constexpr void transfer_elements(T *new_elems, std::size_t count) {
     if constexpr (std::is_trivially_copyable_v<T>) {
       std::memcpy(new_elems, elems, count * sizeof(T));
     } else {
@@ -76,11 +76,11 @@ private:
       try {
         for (; i < count; ++i) {
           if constexpr (UseMove) {
-            mystd::allocator_traits<Allocator>::construct(
-                alloc, new_elems + i, std::move(elems[i]));
+            mystd::allocator_traits<Allocator>::construct(alloc, new_elems + i,
+                                                          std::move(elems[i]));
           } else {
-            mystd::allocator_traits<Allocator>::construct(
-                alloc, new_elems + i, elems[i]);
+            mystd::allocator_traits<Allocator>::construct(alloc, new_elems + i,
+                                                          elems[i]);
           }
         }
       } catch (...) {
@@ -222,7 +222,8 @@ public:
         sz = cap = other.sz;
         if constexpr (std::is_trivially_move_constructible_v<T>)
           std::memmove(elems, other.elems, sz * sizeof(T));
-        else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+        else if (std::is_nothrow_move_constructible_v<T> ||
+                 !std::is_copy_constructible_v<T>) {
           std::size_t i = 0;
           try {
             for (; i < sz; ++i)
@@ -238,8 +239,8 @@ public:
           std::size_t i = 0;
           try {
             for (; i < sz; ++i)
-              mystd::allocator_traits<Allocator>::construct(
-                  alloc, elems + i, other.elems[i]);
+              mystd::allocator_traits<Allocator>::construct(alloc, elems + i,
+                                                            other.elems[i]);
           } catch (...) {
             for (std::size_t j = 0; j < i; ++j)
               mystd::allocator_traits<Allocator>::destroy(alloc, elems + j);
@@ -247,11 +248,13 @@ public:
             throw;
           }
         }
-        if constexpr (!std::is_trivially_destructible_v<T> && 
+        if constexpr (!std::is_trivially_destructible_v<T> &&
                       !std::is_trivially_move_constructible_v<T>) {
-          if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+          if (std::is_nothrow_move_constructible_v<T> ||
+              !std::is_copy_constructible_v<T>) {
             for (std::size_t j = 0; j < sz; ++j)
-              mystd::allocator_traits<Allocator>::destroy(alloc, other.elems + j);
+              mystd::allocator_traits<Allocator>::destroy(alloc,
+                                                          other.elems + j);
           }
         }
         other.elems = nullptr;
@@ -384,7 +387,8 @@ public:
             mystd::allocator_traits<Allocator>::destroy(alloc, elems + i);
         if constexpr (std::is_trivially_copyable_v<T>)
           std::memcpy(elems, other.elems, other.sz * sizeof(T));
-        else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+        else if (std::is_nothrow_move_constructible_v<T> ||
+                 !std::is_copy_constructible_v<T>) {
           std::size_t i = 0;
           try {
             for (; i < other.sz; ++i)
@@ -399,8 +403,8 @@ public:
           std::size_t i = 0;
           try {
             for (; i < other.sz; ++i)
-              mystd::allocator_traits<Allocator>::construct(
-                  alloc, elems + i, other.elems[i]);
+              mystd::allocator_traits<Allocator>::construct(alloc, elems + i,
+                                                            other.elems[i]);
           } catch (...) {
             for (std::size_t j = 0; j < i; ++j)
               mystd::allocator_traits<Allocator>::destroy(alloc, elems + j);
@@ -552,7 +556,8 @@ public:
     if (elems) {
       if constexpr (std::is_trivially_copyable_v<T>) {
         std::memcpy(new_elems, elems, sz * sizeof(T));
-      } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+      } else if (std::is_nothrow_move_constructible_v<T> ||
+                 !std::is_copy_constructible_v<T>) {
         transfer_elements<true>(new_elems, sz);
       } else {
         transfer_elements<false>(new_elems, sz);
@@ -573,7 +578,8 @@ public:
         T *new_elems = mystd::allocator_traits<Allocator>::allocate(alloc, sz);
         if constexpr (std::is_trivially_copyable_v<T>) {
           std::memcpy(new_elems, elems, sz * sizeof(T));
-        } else if (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
+        } else if (std::is_nothrow_move_constructible_v<T> ||
+                   !std::is_copy_constructible_v<T>) {
           transfer_elements<true>(new_elems, sz);
         } else {
           transfer_elements<false>(new_elems, sz);
