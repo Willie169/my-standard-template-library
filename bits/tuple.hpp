@@ -10,7 +10,7 @@
 
 namespace mystd {
 
-class _tuple_impl;
+struct _tuple_impl;
 class tuple;
 
 template <class... Types>
@@ -56,22 +56,19 @@ template <std::size_t I> struct _tuple_impl<I> {
 
 template <std::size_t I, class Head, class... Tail>
 struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
-private:
-  using base = _tuple_impl<I + 1, Tail...>;
   Head head;
 
-public:
   constexpr _tuple_impl()
     requires(std::is_default_constructible_v<Head> &&
              (std::is_default_constructible_v<Tail> && ...))
-      : base(), head() {}
+      : _tuple_impl<I + 1, Tail...>(), head() {}
 
   explicit((!std::is_convertible_v<const Head &, Head> ||
             (!std::is_convertible_v<const Tail &, Tail> ||
              ...))) constexpr _tuple_impl(const Head &arg, const Tail &...args)
     requires(std::is_constructible_v<Head, const Head &> &&
              (std::is_constructible_v<Tail, const Tail &> && ...))
-      : base(args...), head(arg) {}
+      : _tuple_impl<I + 1, Tail...>(args...), head(arg) {}
 
   template <class UHead, class... UTail>
   explicit((!std::is_convertible_v<UHead, Head> ||
@@ -80,20 +77,22 @@ public:
     requires(sizeof...(Tail) == sizeof...(UTail)) &&
                 std::is_constructible_v<Head, UHead> &&
                 (std::is_constructible_v<Tail, UTail> && ...)
-      : base(std::forward<UTail>(args)...), head(std::forward<UHead>(arg)) {}
+      : _tuple_impl<I + 1, Tail...>(std::forward<UTail>(args)...),
+        head(std::forward<UHead>(arg)) {}
 
   template <typename Alloc>
   constexpr _tuple_impl(std::allocator_arg_t, const Alloc &alloc)
     requires(std::is_default_constructible_v<Head> &&
              (std::is_default_constructible_v<Tail> && ...))
-      : base(std::allocator_arg, alloc), head() {}
+      : _tuple_impl<I + 1, Tail...>(std::allocator_arg, alloc), head() {}
 
   template <typename Alloc>
   constexpr _tuple_impl(std::allocator_arg_t, const Alloc &alloc,
                         const Head &arg, const Tail &...args)
     requires(std::is_constructible_v<Head, const Head &> &&
              (std::is_constructible_v<Tail, const Tail &> && ...))
-      : base(std::allocator_arg, alloc, args...), head(arg) {}
+      : _tuple_impl<I + 1, Tail...>(std::allocator_arg, alloc, args...),
+        head(arg) {}
 
   template <typename Alloc, class UHead, class... UTail>
   constexpr _tuple_impl(std::allocator_arg_t, const Alloc &alloc, UHead &&arg,
@@ -101,7 +100,8 @@ public:
     requires(sizeof...(Tail) == sizeof...(UTail)) &&
                 std::is_constructible_v<Head, UHead> &&
                 (std::is_constructible_v<Tail, UTail> && ...)
-      : base(std::allocator_arg, alloc, std::forward<UTail>(args)...),
+      : _tuple_impl<I + 1, Tail...>(std::allocator_arg, alloc,
+                                    std::forward<UTail>(args)...),
         head(std::forward<UHead>(arg)) {}
 
   template <class... UTypes>
@@ -114,7 +114,8 @@ public:
                       Tail, const mystd::tuple_element_t<
                                 I + 1, _tuple_impl<I, UTypes...>> &> &&
                   ...))
-      : base(static_cast<const _tuple_impl<I + 1, UTypes...> &>(other)),
+      : _tuple_impl<I + 1, Tail...>(
+            static_cast<const _tuple_impl<I + 1, UTypes...> &>(other)),
         head(other.head) {}
 
   template <class... UTypes>
@@ -127,7 +128,8 @@ public:
                       Tail, mystd::tuple_element_t<
                                 I + 1, _tuple_impl<I, UTypes...>> &&> &&
                   ...))
-      : base(static_cast<_tuple_impl<I + 1, UTypes...> &&>(other)),
+      : _tuple_impl<I + 1, Tail...>(
+            static_cast<_tuple_impl<I + 1, UTypes...> &&>(other)),
         head(std::move(other.head)) {}
 
   template <std::size_t J, std::size_t K, class... Ts>
