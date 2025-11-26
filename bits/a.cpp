@@ -364,9 +364,6 @@ void test_type_traits() {
     std::cout << "\n";
 }
 
-void test_structured_binding() {
-}
-
 void test_edge_cases() {
     std::cout << "=== Edge Cases Tests ===\n";
     
@@ -483,7 +480,6 @@ int main() {
     test_special_types();
     test_pairs();
     test_type_traits();
-    test_structured_binding();
     test_edge_cases();
     test_ctad();
     test_allocator_aware();
