@@ -217,18 +217,19 @@ struct _tuple_impl<I, Head, Tail...> : public _tuple_impl<I + 1, Tail...> {
   }
 
   template <std::size_t J>
-      constexpr decltype(auto) get() &
-      requires(J >= I && J <= I + sizeof...(Tail)) {
-        if constexpr (I == J) {
-          return (head);
-        } else {
-          return static_cast<base &>(*this).template get<J>();
-        }
-      }
+  constexpr decltype(auto) get() &
+    requires(J >= I && J <= I + sizeof...(Tail))
+  {
+    if constexpr (I == J) {
+      return (head);
+    } else {
+      return static_cast<base &>(*this).template get<J>();
+    }
+  }
 
-      template <std::size_t J>
-      constexpr decltype(auto) get() const &
-        requires(J >= I && J <= I + sizeof...(Tail))
+  template <std::size_t J>
+  constexpr decltype(auto) get() const &
+    requires(J >= I && J <= I + sizeof...(Tail))
   {
     if constexpr (I == J) {
       return (head);
@@ -238,18 +239,19 @@ struct _tuple_impl<I, Head, Tail...> : public _tuple_impl<I + 1, Tail...> {
   }
 
   template <std::size_t J>
-      constexpr decltype(auto) get() &&
-      requires(J >= I && J <= I + sizeof...(Tail)) {
-        if constexpr (I == J) {
-          return std::move(head);
-        } else {
-          return static_cast<base &&>(*this).template get<J>();
-        }
-      }
+  constexpr decltype(auto) get() &&
+    requires(J >= I && J <= I + sizeof...(Tail))
+  {
+    if constexpr (I == J) {
+      return std::move(head);
+    } else {
+      return static_cast<base &&>(*this).template get<J>();
+    }
+  }
 
-      template <std::size_t J>
-      constexpr decltype(auto) get() const &&
-        requires(J >= I && J <= I + sizeof...(Tail))
+  template <std::size_t J>
+  constexpr decltype(auto) get() const &&
+    requires(J >= I && J <= I + sizeof...(Tail))
   {
     if constexpr (I == J) {
       return std::move(head);
@@ -259,19 +261,33 @@ struct _tuple_impl<I, Head, Tail...> : public _tuple_impl<I + 1, Tail...> {
   }
 
   friend constexpr bool operator==(const _tuple_impl &a, const _tuple_impl &b) {
+    if constexpr (sizeof...(Tail) == 0)
+      return a.head == b.head;
     return static_cast<const base &>(a) == static_cast<const base &>(b) &&
            a.head == b.head;
   }
 
-  friend constexpr auto operator<=>(const _tuple_impl &a,
-                                    const _tuple_impl &b) {
-    if (auto cmp = a.head <=> b.head; cmp != 0)
-      return cmp;
-    return static_cast<const base &>(a) <=> static_cast<const base &>(b);
-  }
+    friend constexpr auto operator<=>(const _tuple_impl &a, const _tuple_impl &b)
+        -> std::conditional_t<
+            sizeof...(Tail) == 0,
+            decltype(a.head <=> b.head),
+            std::common_comparison_category_t<
+                decltype(a.head <=> b.head),
+                decltype(static_cast<const base&>(a) <=> static_cast<const base&>(b))
+            >
+        >
+        requires std::three_way_comparable<Head>
+    {
+        if constexpr (sizeof...(Tail) == 0)
+            return a.head <=> b.head;
+        if (auto cmp = a.head <=> b.head; cmp != 0)
+                return cmp;
+            return static_cast<const base&>(a) <=> static_cast<const base&>(b);
+    }
 };
 
-template <class... Types> struct tuple {
+template <class... Types> class tuple {
+public:
   _tuple_impl<0, Types...> _impl;
 
   constexpr tuple()
@@ -480,12 +496,28 @@ template <class... Types> struct tuple {
     return *this;
   }
 
+  template <std::size_t J> constexpr decltype(auto) get() & noexcept {
+    return _impl.template get<J>();
+  }
+
+  template <std::size_t J> constexpr decltype(auto) get() && noexcept {
+    return std::move(_impl).template get<J>();
+  }
+
+  template <std::size_t J> constexpr decltype(auto) get() const & noexcept {
+    return _impl.template get<J>();
+  }
+
+  template <std::size_t J> constexpr decltype(auto) get() const && noexcept {
+    return std::move(_impl).template get<J>();
+  }
+
   template <class E1, class E2>
   constexpr tuple &operator=(const std::pair<E1, E2> &p)
     requires(sizeof...(Types) == 2) &&
-            std::is_assignable_v<decltype(get<0>(std::declval<tuple &>())),
+            std::is_assignable_v<decltype(this->get<0>()),
                                  const E1 &> &&
-            std::is_assignable_v<decltype(get<1>(std::declval<tuple &>())),
+            std::is_assignable_v<decltype(this->get<1>()),
                                  const E2 &>
   {
     this->get<0>() = p.first;
@@ -495,14 +527,14 @@ template <class... Types> struct tuple {
 
   template <class E1, class E2>
   constexpr tuple &operator=(std::pair<E1, E2> &&p) noexcept(
-      std::is_nothrow_assignable_v<decltype(get<0>(std::declval<tuple &>())),
+      std::is_nothrow_assignable_v<decltype(this->get<0>()),
                                    E1 &&> &&
-      std::is_nothrow_assignable_v<decltype(get<1>(std::declval<tuple &>())),
+      std::is_nothrow_assignable_v<decltype(this->get<1>()),
                                    E2 &&>)
     requires(sizeof...(Types) == 2) &&
-            std::is_assignable_v<decltype(get<0>(std::declval<tuple &>())),
+            std::is_assignable_v<decltype(this->get<0>()),
                                  E1 &&> &&
-            std::is_assignable_v<decltype(get<1>(std::declval<tuple &>())),
+            std::is_assignable_v<decltype(this->get<1>()),
                                  E2 &&>
   {
     this->get<0>() = std::move(p.first);
@@ -513,22 +545,6 @@ template <class... Types> struct tuple {
   constexpr void swap(tuple &other) noexcept(
       noexcept((std::is_nothrow_swappable_v<Types> && ...))) {
     _impl.swap(other._impl);
-  }
-
-  template <std::size_t I> constexpr decltype(auto) get() & noexcept {
-    return _impl.template get<I>();
-  }
-
-  template <std::size_t I> constexpr decltype(auto) get() && noexcept {
-    return std::move(_impl).template get<I>();
-  }
-
-  template <std::size_t I> constexpr decltype(auto) get() const & noexcept {
-    return _impl.template get<I>();
-  }
-
-  template <std::size_t I> constexpr decltype(auto) get() const && noexcept {
-    return std::move(_impl).template get<I>();
   }
 
   friend constexpr bool operator==(const tuple &a, const tuple &b) = default;
