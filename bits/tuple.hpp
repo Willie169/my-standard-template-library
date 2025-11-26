@@ -24,6 +24,8 @@ template <typename T> inline constexpr bool _is_tuple_v = _is_tuple<T>::value;
 template <std::size_t I, class... Types> struct _tuple_impl;
 
 template <std::size_t I> struct _tuple_impl<I> {
+  template <std::size_t J> using element_type = void;
+
   constexpr _tuple_impl() {}
   constexpr _tuple_impl(const _tuple_impl &) noexcept {}
   constexpr _tuple_impl(_tuple_impl &&) noexcept {}
@@ -46,12 +48,24 @@ template <std::size_t I> struct _tuple_impl<I> {
   constexpr _tuple_impl &operator=(_tuple_impl &&) noexcept { return *this; }
 
   void swap(_tuple_impl &other) {}
+
+  friend constexpr bool operator==(const _tuple_impl &, const _tuple_impl &) {
+    return true;
+  }
+
+  friend constexpr auto operator<=>(const _tuple_impl &, const _tuple_impl &) {
+    return std::strong_ordering::equal;
+  }
 };
 
 template <std::size_t I, class Head, class... Tail>
-struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
+struct _tuple_impl<I, Head, Tail...> : public _tuple_impl<I + 1, Tail...> {
   using base = _tuple_impl<I + 1, Tail...>;
   Head head;
+
+  template <std::size_t J>
+  using element_type =
+      std::conditional_t<J == I, Head, typename base::template element_type<J>>;
 
   constexpr _tuple_impl()
     requires(std::is_default_constructible_v<Head> &&
@@ -96,29 +110,6 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
       : base(mystd::allocator_arg, alloc, std::forward<UTail>(args)...),
         head(std::forward<UHead>(arg)) {}
 
-  template <class... UTypes>
-  constexpr _tuple_impl(const _tuple_impl<I, UTypes...> &other)
-    requires(sizeof...(Tail) + 1 == sizeof...(UTypes)) &&
-                std::is_constructible_v<Head,
-                                        const typename std::remove_cvref_t<
-                                            _first_type_t<UTypes...>> &> &&
-                std::is_constructible_v<
-                    base, const typename _tuple_impl<I, UTypes...>::base &>
-      : base(static_cast<const typename _tuple_impl<I, UTypes...>::base &>(
-            other)),
-        head(other.head) {}
-
-  template <class... UTypes>
-  constexpr _tuple_impl(_tuple_impl<I, UTypes...> &&other)
-    requires(sizeof...(Tail) + 1 == sizeof...(UTypes)) &&
-                std::is_constructible_v<
-                    Head, std::remove_cvref_t<_first_type_t<UTypes...>>> &&
-                std::is_constructible_v<
-                    base, typename _tuple_impl<I, UTypes...>::base>
-      : base(std::move(
-            static_cast<typename _tuple_impl<I, UTypes...>::base &>(other))),
-        head(std::move(other.head)) {}
-
   constexpr _tuple_impl(const _tuple_impl &other)
     requires(std::is_copy_constructible_v<Head> &&
              std::is_copy_constructible_v<base>)
@@ -128,6 +119,23 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
     requires(std::is_move_constructible_v<Head> &&
              std::is_move_constructible_v<base>)
       : base(std::move(static_cast<base &>(other))),
+        head(std::move(other.head)) {}
+
+  template <class Alloc>
+  constexpr _tuple_impl(mystd::allocator_arg_t, const Alloc &alloc,
+                        const _tuple_impl &other)
+    requires(std::is_copy_constructible_v<Head> &&
+             std::is_copy_constructible_v<base>)
+      : base(mystd::allocator_arg, alloc, static_cast<const base &>(other)),
+        head(other.head) {}
+
+  template <class Alloc>
+  constexpr _tuple_impl(mystd::allocator_arg_t, const Alloc &alloc,
+                        _tuple_impl &&other)
+    requires(std::is_move_constructible_v<Head> &&
+             std::is_move_constructible_v<base>)
+      : base(mystd::allocator_arg, alloc,
+             std::move(static_cast<base &>(other))),
         head(std::move(other.head)) {}
 
   template <class Alloc, class... UTypes>
@@ -157,23 +165,6 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
                  other))),
         head(std::move(other.head)) {}
 
-  template <class Alloc>
-  constexpr _tuple_impl(mystd::allocator_arg_t, const Alloc &alloc,
-                        const _tuple_impl &other)
-    requires(std::is_copy_constructible_v<Head> &&
-             std::is_copy_constructible_v<base>)
-      : base(mystd::allocator_arg, alloc, static_cast<const base &>(other)),
-        head(other.head) {}
-
-  template <class Alloc>
-  constexpr _tuple_impl(mystd::allocator_arg_t, const Alloc &alloc,
-                        _tuple_impl &&other)
-    requires(std::is_move_constructible_v<Head> &&
-             std::is_move_constructible_v<base>)
-      : base(mystd::allocator_arg, alloc,
-             std::move(static_cast<base &>(other))),
-        head(std::move(other.head)) {}
-
   constexpr _tuple_impl &operator=(const _tuple_impl &other)
     requires std::is_copy_assignable_v<Head> && std::is_copy_assignable_v<base>
   {
@@ -192,6 +183,32 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
     return *this;
   }
 
+  template <class UHead, class... UTail>
+  constexpr _tuple_impl &operator=(const _tuple_impl<I, UHead, UTail...> &other)
+    requires(sizeof...(Tail) == sizeof...(UTail)) &&
+            std::is_assignable_v<Head &, const UHead &> &&
+            std::is_assignable_v<base &, const _tuple_impl<I + 1, UTail...> &>
+  {
+    head = other.head;
+    base::operator=(static_cast<const _tuple_impl<I + 1, UTail...> &>(other));
+    return *this;
+  }
+
+  template <class UHead, class... UTail>
+  constexpr _tuple_impl &
+  operator=(_tuple_impl<I, UHead, UTail...> &&other) noexcept(
+      std::is_nothrow_assignable_v<Head &, UHead &&> &&
+      std::is_nothrow_assignable_v<base &, _tuple_impl<I + 1, UTail...> &&>)
+    requires(sizeof...(Tail) == sizeof...(UTail)) &&
+            std::is_assignable_v<Head &, UHead &&> &&
+            std::is_assignable_v<base &, _tuple_impl<I + 1, UTail...> &&>
+  {
+    head = std::move(other.head);
+    base::operator=(
+        static_cast<_tuple_impl<I + 1, UTail...> &&>(std::move(other)));
+    return *this;
+  }
+
   constexpr void swap(_tuple_impl &other) noexcept(
       std::is_nothrow_swappable_v<Head> &&
       noexcept(std::declval<base &>().swap(std::declval<base &>()))) {
@@ -200,42 +217,72 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
   }
 
   template <std::size_t J>
-  constexpr decltype(auto) get()
-    requires(J >= I && J <= I + sizeof...(Tail))
+      constexpr decltype(auto) get() &
+      requires(J >= I && J <= I + sizeof...(Tail)) {
+        if constexpr (I == J) {
+          return (head);
+        } else {
+          return static_cast<base &>(*this).template get<J>();
+        }
+      }
+
+      template <std::size_t J>
+      constexpr decltype(auto) get() const &
+        requires(J >= I && J <= I + sizeof...(Tail))
   {
     if constexpr (I == J) {
-      return head;
+      return (head);
     } else {
-      return base::template get<J>();
+      return static_cast<const base &>(*this).template get<J>();
     }
   }
 
   template <std::size_t J>
-  constexpr decltype(auto) get() const
-    requires(J >= I && J <= I + sizeof...(Tail))
+      constexpr decltype(auto) get() &&
+      requires(J >= I && J <= I + sizeof...(Tail)) {
+        if constexpr (I == J) {
+          return std::move(head);
+        } else {
+          return static_cast<base &&>(*this).template get<J>();
+        }
+      }
+
+      template <std::size_t J>
+      constexpr decltype(auto) get() const &&
+        requires(J >= I && J <= I + sizeof...(Tail))
   {
     if constexpr (I == J) {
-      return head;
+      return std::move(head);
     } else {
-      return base::template get<J>();
+      return static_cast<const base &&>(*this).template get<J>();
     }
+  }
+
+  friend constexpr bool operator==(const _tuple_impl &a, const _tuple_impl &b) {
+    return static_cast<const base &>(a) == static_cast<const base &>(b) &&
+           a.head == b.head;
+  }
+
+  friend constexpr auto operator<=>(const _tuple_impl &a,
+                                    const _tuple_impl &b) {
+    if (auto cmp = a.head <=> b.head; cmp != 0)
+      return cmp;
+    return static_cast<const base &>(a) <=> static_cast<const base &>(b);
   }
 };
 
-template <class... Types> class tuple {
-private:
-  _tuple_impl<0, Types...> impl;
+template <class... Types> struct tuple {
+  _tuple_impl<0, Types...> _impl;
 
-public:
   constexpr tuple()
     requires(std::is_default_constructible_v<Types> && ...)
-      : impl() {}
+      : _impl() {}
 
   explicit((!std::is_convertible_v<const Types &, Types> ||
             ...)) constexpr tuple(const Types &...args)
     requires(sizeof...(Types) >= 1) &&
             (std::is_copy_constructible_v<Types> && ...)
-      : impl(args...) {}
+      : _impl(args...) {}
 
   template <class... UTypes>
   explicit((!std::is_convertible_v<UTypes, Types> ||
@@ -250,7 +297,7 @@ public:
              !std::is_same_v<std::remove_cvref_t<_first_type_t<UTypes...>>,
                              mystd::allocator_arg_t> ||
              std::is_same_v<_first_type_t<Types...>, mystd::allocator_arg_t>)
-      : impl(args...) {}
+      : _impl(std::forward<UTypes>(args)...) {}
 
   template <class... UTypes>
   explicit((!std::is_convertible_v<Types, const UTypes &> ||
@@ -261,7 +308,7 @@ public:
                ((std::is_convertible_v<UTypes, Types> || ...) ||
                 (std::is_constructible_v<Types, UTypes> || ...) ||
                 (std::is_same_v<Types, UTypes> || ...))))
-      : impl(other.impl) {}
+      : _impl(other._impl) {}
 
   template <class... UTypes>
   explicit((!std::is_convertible_v<Types, UTypes &&> ||
@@ -272,44 +319,47 @@ public:
                ((std::is_convertible_v<UTypes, Types> || ...) ||
                 (std::is_constructible_v<Types, UTypes> || ...) ||
                 (std::is_same_v<Types, UTypes> || ...))))
-      : impl(std::move(other.impl)) {}
+      : _impl(std::move(other._impl)) {}
+
+  template <class U1, class U2>
+  explicit(
+      (!std::is_convertible_v<
+           U1, typename _tuple_impl<0, Types...>::template element_type<0>> ||
+       !std::is_convertible_v<
+           U2, typename _tuple_impl<0, Types...>::template element_type<
+                   1>>)) constexpr tuple(const std::pair<U1, U2> &p)
+    requires(sizeof...(Types) == 2) &&
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<0>,
+                U1> &&
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<1>, U2>
+      : _impl(p.first, p.second) {}
 
   template <class U1, class U2>
   explicit((
-      !std::is_convertible_v<U1, std::tuple_element_t<0, tuple<Types...>>> ||
       !std::is_convertible_v<
-          U2, std::tuple_element_t<
-                  1, tuple<Types...>>>)) constexpr tuple(const std::pair<U1, U2>
-                                                             &p)
-    requires(sizeof...(Types) == 2) &&
-            std::is_constructible_v<std::tuple_element_t<0, tuple<Types...>>,
-                                    U1> &&
-            std::is_constructible_v<std::tuple_element_t<1, tuple<Types...>>,
-                                    U2>
-      : impl(p.first, p.second) {}
-
-  template <class U1, class U2>
-  explicit((
-      !std::is_convertible_v<U1 &&, std::tuple_element_t<0, tuple<Types...>>> ||
+          U1 &&, typename _tuple_impl<0, Types...>::template element_type<0>> ||
       !std::is_convertible_v<
-          U2 &&, std::tuple_element_t<
-                     1, tuple<Types...>>>)) constexpr tuple(std::pair<U1, U2>
-                                                                &&p)
+          U2 &&, typename _tuple_impl<0, Types...>::template element_type<
+                     1>>)) constexpr tuple(std::pair<U1, U2> &&p)
     requires(sizeof...(Types) == 2) &&
-            std::is_constructible_v<std::tuple_element_t<0, tuple<Types...>>,
-                                    U1 &&> &&
-            std::is_constructible_v<std::tuple_element_t<1, tuple<Types...>>,
-                                    U2 &&>
-      : impl(std::move(p.first), std::move(p.second)) {}
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<0>,
+                U1 &&> &&
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<1>,
+                U2 &&>
+      : _impl(std::move(p.first), std::move(p.second)) {}
 
-  tuple(const tuple &other) : impl(other.impl) {}
+  tuple(const tuple &other) : _impl(other._impl) {}
 
-  tuple(tuple &&other) : impl(std::move(other.impl)) {}
+  tuple(tuple &&other) : _impl(std::move(other._impl)) {}
 
   template <class Alloc>
   constexpr tuple(mystd::allocator_arg_t, const Alloc &a)
     requires(std::is_default_constructible_v<Types> && ...)
-      : impl(mystd::allocator_arg, a) {}
+      : _impl(mystd::allocator_arg, a) {}
 
   template <class Alloc>
   explicit((!std::is_convertible_v<const Types &, Types> ||
@@ -317,7 +367,7 @@ public:
                                   const Types &...args)
     requires(sizeof...(Types) >= 1) &&
             (std::is_copy_constructible_v<Types> && ...)
-      : impl(mystd::allocator_arg, a, args...) {}
+      : _impl(mystd::allocator_arg, a, args...) {}
 
   template <class Alloc, class... UTypes>
   explicit((!std::is_convertible_v<UTypes, Types> ||
@@ -328,7 +378,7 @@ public:
             (std::is_constructible_v<Types, UTypes> && ...) &&
             (sizeof...(Types) > 1 ||
              !mystd::_is_tuple_v<std::remove_cvref_t<_first_type_t<UTypes...>>>)
-      : impl(mystd::allocator_arg, a, args...) {}
+      : _impl(mystd::allocator_arg, a, std::forward<UTypes>(args)...) {}
 
   template <class Alloc, class... UTypes>
   explicit((!std::is_convertible_v<Types, const UTypes &> ||
@@ -340,7 +390,7 @@ public:
                ((std::is_convertible_v<UTypes, Types> || ...) ||
                 (std::is_constructible_v<Types, UTypes> || ...) ||
                 (std::is_same_v<Types, UTypes> || ...))))
-      : impl(mystd::allocator_arg, a, other.impl) {}
+      : _impl(mystd::allocator_arg, a, other._impl) {}
 
   template <class Alloc, class... UTypes>
   explicit((!std::is_convertible_v<Types, UTypes &&> ||
@@ -352,53 +402,55 @@ public:
                ((std::is_convertible_v<UTypes, Types> || ...) ||
                 (std::is_constructible_v<Types, UTypes> || ...) ||
                 (std::is_same_v<Types, UTypes> || ...))))
-      : impl(mystd::allocator_arg, a, std::move(other.impl)) {}
+      : _impl(mystd::allocator_arg, a, std::move(other._impl)) {}
+
+  template <class Alloc, class U1, class U2>
+  explicit(
+      (!std::is_convertible_v<
+           U1, typename _tuple_impl<0, Types...>::template element_type<0>> ||
+       !std::is_convertible_v<
+           U2, typename _tuple_impl<0, Types...>::template element_type<
+                   1>>)) constexpr tuple(mystd::allocator_arg_t, const Alloc &a,
+                                         const std::pair<U1, U2> &p)
+    requires(sizeof...(Types) == 2) &&
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<0>,
+                U1> &&
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<1>, U2>
+      : _impl(mystd::allocator_arg, a, p.first, p.second) {}
 
   template <class Alloc, class U1, class U2>
   explicit((
-      !std::is_convertible_v<U1, std::tuple_element_t<0, tuple<Types...>>> ||
       !std::is_convertible_v<
-          U2, std::tuple_element_t<
-                  1, tuple<Types...>>>)) constexpr tuple(mystd::allocator_arg_t,
-                                                         const Alloc &a,
-                                                         const std::pair<U1, U2>
-                                                             &p)
-    requires(sizeof...(Types) == 2) &&
-            std::is_constructible_v<std::tuple_element_t<0, tuple<Types...>>,
-                                    U1> &&
-            std::is_constructible_v<std::tuple_element_t<1, tuple<Types...>>,
-                                    U2>
-      : impl(mystd::allocator_arg, a, p.first, p.second) {}
-
-  template <class Alloc, class U1, class U2>
-  explicit((
-      !std::is_convertible_v<U1 &&, std::tuple_element_t<0, tuple<Types...>>> ||
+          U1 &&, typename _tuple_impl<0, Types...>::template element_type<0>> ||
       !std::is_convertible_v<
-          U2 &&,
-          std::tuple_element_t<
-              1, tuple<Types...>>>)) constexpr tuple(mystd::allocator_arg_t,
-                                                     const Alloc &a,
-                                                     std::pair<U1, U2> &&p)
+          U2 &&, typename _tuple_impl<0, Types...>::template element_type<
+                     1>>)) constexpr tuple(mystd::allocator_arg_t,
+                                           const Alloc &a,
+                                           std::pair<U1, U2> &&p)
     requires(sizeof...(Types) == 2) &&
-            std::is_constructible_v<std::tuple_element_t<0, tuple<Types...>>,
-                                    U1 &&> &&
-            std::is_constructible_v<std::tuple_element_t<1, tuple<Types...>>,
-                                    U2 &&>
-      : impl(mystd::allocator_arg, a, std::move(p.first), std::move(p.second)) {
-  }
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<0>,
+                U1 &&> &&
+            std::is_constructible_v<
+                typename _tuple_impl<0, Types...>::template element_type<1>,
+                U2 &&>
+      : _impl(mystd::allocator_arg, a, std::move(p.first),
+              std::move(p.second)) {}
 
   template <class Alloc>
   tuple(mystd::allocator_arg_t, const Alloc &a, const tuple &other)
-      : impl(mystd::allocator_arg, a, other.impl) {}
+      : _impl(mystd::allocator_arg, a, other._impl) {}
 
   template <class Alloc>
   tuple(mystd::allocator_arg_t, const Alloc &a, tuple &&other)
-      : impl(mystd::allocator_arg, a, std::move(other.impl)) {}
+      : _impl(mystd::allocator_arg, a, std::move(other._impl)) {}
 
   constexpr tuple &operator=(const tuple &other)
     requires(std::is_copy_assignable_v<Types> && ...)
   {
-    impl = other.impl;
+    _impl = other._impl;
     return *this;
   }
 
@@ -406,7 +458,7 @@ public:
       (std::is_nothrow_move_assignable_v<Types> && ...))
     requires(std::is_move_assignable_v<Types> && ...)
   {
-    impl = std::move(other.impl);
+    _impl = std::move(other._impl);
     return *this;
   }
 
@@ -415,7 +467,7 @@ public:
     requires(sizeof...(Types) == sizeof...(UTypes)) &&
             (std::is_assignable_v<Types &, const UTypes &> && ...)
   {
-    impl = other.impl;
+    _impl = other._impl;
     return *this;
   }
 
@@ -424,79 +476,64 @@ public:
     requires(sizeof...(Types) == sizeof...(UTypes)) &&
             (std::is_assignable_v<Types &, UTypes &&> && ...)
   {
-    impl = std::move(other.impl);
+    _impl = std::move(other._impl);
     return *this;
   }
 
   template <class E1, class E2>
   constexpr tuple &operator=(const std::pair<E1, E2> &p)
     requires(sizeof...(Types) == 2) &&
-            std::is_assignable_v<std::tuple_element_t<0, tuple<Types...>> &,
+            std::is_assignable_v<decltype(get<0>(std::declval<tuple &>())),
                                  const E1 &> &&
-            std::is_assignable_v<std::tuple_element_t<1, tuple<Types...>> &,
+            std::is_assignable_v<decltype(get<1>(std::declval<tuple &>())),
                                  const E2 &>
   {
-    impl.template get<0>() = p.first;
-    impl.template get<1>() = p.second;
+    this->get<0>() = p.first;
+    this->get<1>() = p.second;
     return *this;
   }
 
   template <class E1, class E2>
   constexpr tuple &operator=(std::pair<E1, E2> &&p) noexcept(
-      std::is_nothrow_assignable_v<std::tuple_element_t<0, tuple<Types...>> &,
+      std::is_nothrow_assignable_v<decltype(get<0>(std::declval<tuple &>())),
                                    E1 &&> &&
-      std::is_nothrow_assignable_v<std::tuple_element_t<1, tuple<Types...>> &,
+      std::is_nothrow_assignable_v<decltype(get<1>(std::declval<tuple &>())),
                                    E2 &&>)
     requires(sizeof...(Types) == 2) &&
-            std::is_assignable_v<std::tuple_element_t<0, tuple<Types...>> &,
+            std::is_assignable_v<decltype(get<0>(std::declval<tuple &>())),
                                  E1 &&> &&
-            std::is_assignable_v<std::tuple_element_t<1, tuple<Types...>> &,
+            std::is_assignable_v<decltype(get<1>(std::declval<tuple &>())),
                                  E2 &&>
   {
-    impl.template get<0>() = std::move(p.first);
-    impl.template get<1>() = std::move(p.second);
+    this->get<0>() = std::move(p.first);
+    this->get<1>() = std::move(p.second);
     return *this;
   }
 
   constexpr void swap(tuple &other) noexcept(
       noexcept((std::is_nothrow_swappable_v<Types> && ...))) {
-    impl.swap(other.impl);
+    _impl.swap(other._impl);
   }
 
-  template <std::size_t I, class... Ts>
-  friend constexpr decltype(auto) get(tuple<Ts...> &) noexcept;
-
-  template <std::size_t I, class... Ts>
-  friend constexpr decltype(auto) get(tuple<Ts...> &&) noexcept;
-
-  template <std::size_t I, class... Ts>
-  friend constexpr decltype(auto) get(const tuple<Ts...> &) noexcept;
-
-  template <std::size_t I, class... Ts>
-  friend constexpr decltype(auto) get(const tuple<Ts...> &&) noexcept;
-
-private:
-  template <std::size_t... I>
-  static constexpr bool compare_eq(const tuple &a, const tuple &b,
-                                   std::index_sequence<I...>);
-
-  template <std::size_t... I>
-  static constexpr auto compare_spaceship(const tuple &a, const tuple &b,
-                                          std::index_sequence<I...>);
-
-public:
-  friend constexpr bool operator==(const tuple &a, const tuple &b)
-    requires((std::equality_comparable<Types>) && ...)
-  {
-    return compare_eq(a, b, std::make_index_sequence<sizeof...(Types)>{});
+  template <std::size_t I> constexpr decltype(auto) get() & noexcept {
+    return _impl.template get<I>();
   }
 
-  friend constexpr auto operator<=>(const tuple &a, const tuple &b)
-    requires((std::three_way_comparable<Types>) && ...)
-  {
-    return compare_spaceship(a, b,
-                             std::make_index_sequence<sizeof...(Types)>{});
+  template <std::size_t I> constexpr decltype(auto) get() && noexcept {
+    return std::move(_impl).template get<I>();
   }
+
+  template <std::size_t I> constexpr decltype(auto) get() const & noexcept {
+    return _impl.template get<I>();
+  }
+
+  template <std::size_t I> constexpr decltype(auto) get() const && noexcept {
+    return std::move(_impl).template get<I>();
+  }
+
+  friend constexpr bool operator==(const tuple &a, const tuple &b) = default;
+
+  friend constexpr auto operator<=>(const tuple &a, const tuple &b) = default;
 };
 
 template <> class tuple<> {
@@ -510,6 +547,14 @@ public:
   constexpr tuple &operator=(tuple &&) noexcept = default;
 
   constexpr void swap(tuple &) noexcept {}
+
+  friend constexpr bool operator==(const tuple &, const tuple &) noexcept {
+    return true;
+  }
+
+  friend constexpr auto operator<=>(const tuple &, const tuple &) noexcept {
+    return std::strong_ordering::equal;
+  }
 };
 
 template <class... UTypes> tuple(UTypes...) -> tuple<UTypes...>;
@@ -529,23 +574,23 @@ template <typename... Ts>
 struct _is_tuple<mystd::tuple<Ts...>> : std::true_type {};
 
 template <std::size_t I, class... Types>
-constexpr decltype(auto) get(mystd::tuple<Types...> &t) noexcept {
-  return t.impl.template get<I>();
+constexpr decltype(auto) get(tuple<Types...> &t) noexcept {
+  return t.template get<I>();
 }
 
 template <std::size_t I, class... Types>
-constexpr decltype(auto) get(mystd::tuple<Types...> &&t) noexcept {
-  return std::move(t.impl.template get<I>());
+constexpr decltype(auto) get(tuple<Types...> &&t) noexcept {
+  return std::move(t).template get<I>();
 }
 
 template <std::size_t I, class... Types>
-constexpr decltype(auto) get(const mystd::tuple<Types...> &t) noexcept {
-  return t.impl.template get<I>();
+constexpr decltype(auto) get(const tuple<Types...> &t) noexcept {
+  return t.template get<I>();
 }
 
 template <std::size_t I, class... Types>
-constexpr decltype(auto) get(const mystd::tuple<Types...> &&t) noexcept {
-  return std::move(t.impl.template get<I>());
+constexpr decltype(auto) get(const tuple<Types...> &&t) noexcept {
+  return std::move(t).template get<I>();
 }
 
 template <class T, class... Types> struct _count_of_type;
@@ -606,29 +651,6 @@ constexpr decltype(auto) get(const mystd::tuple<Types...> &&t) noexcept
   requires(_count_of_type_v<T, Types...> == 1)
 {
   return get<_index_of_type_v<T, Types...>>(std::move(t));
-}
-
-template <class... Types>
-template <std::size_t... I>
-constexpr bool tuple<Types...>::compare_eq(const tuple<Types...> &a,
-                                           const tuple<Types...> &b,
-                                           std::index_sequence<I...>) {
-  return ((mystd::get<I>(a) == mystd::get<I>(b)) && ...);
-}
-
-template <class... Types>
-template <std::size_t... I>
-constexpr auto tuple<Types...>::compare_spaceship(const tuple<Types...> &a,
-                                                  const tuple<Types...> &b,
-                                                  std::index_sequence<I...>) {
-  using common_ordering =
-      std::common_type_t<decltype(mystd::get<I>(a) <=> mystd::get<I>(b))...>;
-  common_ordering result = common_ordering::equivalent;
-  ((result == common_ordering::equivalent
-        ? (result = mystd::get<I>(a) <=> mystd::get<I>(b))
-        : result),
-   ...);
-  return result;
 }
 
 template <class... Types> constexpr auto make_tuple(Types &&...args) {
@@ -713,15 +735,13 @@ template <class... Types>
 struct tuple_size<mystd::tuple<Types...>>
     : std::integral_constant<std::size_t, sizeof...(Types)> {};
 
-template <std::size_t I, class Head, class... Tail>
-struct tuple_element<I, mystd::tuple<Head, Tail...>>
-    : std::tuple_element<I - 1, mystd::tuple<Tail...>> {
-  static_assert(I < sizeof...(Tail) + 1, "Index out of bounds");
-};
-
 template <class Head, class... Tail>
 struct tuple_element<0, mystd::tuple<Head, Tail...>> {
   using type = Head;
 };
+
+template <std::size_t I, class Head, class... Tail>
+struct tuple_element<I, mystd::tuple<Head, Tail...>>
+    : tuple_element<I - 1, mystd::tuple<Tail...>> {};
 
 } // namespace std
