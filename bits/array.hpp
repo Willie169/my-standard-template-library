@@ -13,7 +13,6 @@
 
 #include "range-access.hpp"
 #include "swap.hpp"
-#include "tuple_size_and_element.hpp"
 
 namespace mystd {
 
@@ -108,14 +107,6 @@ constexpr void swap(mystd::array<T, N> &lhs,
   lhs.swap(rhs);
 }
 
-template <class T, std::size_t N>
-struct tuple_size<mystd::array<T, N>> : integral_constant<std::size_t, N> {};
-
-template <std::size_t I, class T, std::size_t N>
-struct tuple_element<I, mystd::array<T, N>> {
-  using type = T;
-};
-
 } // namespace mystd
 
 template <class T, std::size_t N>
@@ -164,3 +155,15 @@ constexpr mystd::array<std::remove_cv_t<T>, N> to_array(T (&&arr)[N]) {
     return mystd::array<std::remove_cv_t<T>, N>{std::move(arr[I])...};
   }(std::make_index_sequence<N>{});
 }
+
+namespace std {
+
+template <class T, std::size_t N>
+struct tuple_size<mystd::array<T, N>> : integral_constant<std::size_t, N> {};
+
+template <std::size_t I, class T, std::size_t N>
+struct tuple_element<I, mystd::array<T, N>> {
+  using type = T;
+};
+
+} // namespace std
