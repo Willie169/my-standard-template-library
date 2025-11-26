@@ -7,7 +7,7 @@
 #include "allocator.hpp"
 #include "ignore.hpp"
 #include "swap.hpp"
-#include "tuple_size_and_element.hpp"
+#include "tuple-using.hpp"
 
 namespace mystd {
 
@@ -90,12 +90,23 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
   constexpr _tuple_impl(const _tuple_impl<I, UTypes...> &other)
     requires(sizeof...(Tail) + 1 == sizeof...(UTypes)) &&
                 std::is_constructible_v<
-                    Head, const typename _tuple_impl<I, UTypes...>::Head &> &&
+                    Head, const typename std::remove_cvref_t<_first_type_t<UTypes...>> &> &&
                 std::is_constructible_v<
                     base, const typename _tuple_impl<I, UTypes...>::base &>
       : base(static_cast<const typename _tuple_impl<I, UTypes...>::base &>(
             other)),
         head(other.head) {}
+
+  template <class... UTypes>
+  constexpr _tuple_impl(_tuple_impl<I, UTypes...> &&other)
+    requires(sizeof...(Tail) + 1 == sizeof...(UTypes)) &&
+                std::is_constructible_v<
+                    Head, std::remove_cvref_t<_first_type_t<UTypes...>>> &&
+                std::is_constructible_v<
+                    base, typename _tuple_impl<I, UTypes...>::base>
+      : base(std::move(
+            static_cast<typename _tuple_impl<I, UTypes...>::base &>(other))),
+        head(std::move(other.head)) {}
 
   constexpr _tuple_impl(const _tuple_impl &other)
     requires(std::is_copy_constructible_v<Head> &&
@@ -106,17 +117,6 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
     requires(std::is_move_constructible_v<Head> &&
              std::is_move_constructible_v<base>)
       : base(std::move(static_cast<base &>(other))),
-        head(std::move(other.head)) {}
-
-  template <class... UTypes>
-  constexpr _tuple_impl(_tuple_impl<I, UTypes...> &&other)
-    requires(sizeof...(Tail) + 1 == sizeof...(UTypes)) &&
-                std::is_constructible_v<
-                    Head, typename _tuple_impl<I, UTypes...>::Head> &&
-                std::is_constructible_v<
-                    base, typename _tuple_impl<I, UTypes...>::base>
-      : base(std::move(
-            static_cast<typename _tuple_impl<I, UTypes...>::base &>(other))),
         head(std::move(other.head)) {}
 
   constexpr _tuple_impl &operator=(const _tuple_impl &other)
@@ -145,7 +145,7 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
   }
 
   template <std::size_t J>
-  constexpr auto &get()
+  constexpr decltype(auto) get()
     requires(J >= I && J <= I + sizeof...(Tail))
   {
     if constexpr (I == J) {
@@ -156,7 +156,7 @@ struct _tuple_impl<I, Head, Tail...> : private _tuple_impl<I + 1, Tail...> {
   }
 
   template <std::size_t J>
-  constexpr const auto &get() const
+  constexpr decltype(auto) get() const
     requires(J >= I && J <= I + sizeof...(Tail))
   {
     if constexpr (I == J) {
@@ -409,20 +409,16 @@ public:
   }
 
   template <std::size_t I, class... Ts>
-  inline friend constexpr typename tuple_element<I, tuple<Ts...>>::type &
-  get(tuple<Ts...> &) noexcept;
+  friend constexpr decltype(auto) get(tuple<Ts...> &) noexcept;
 
   template <std::size_t I, class... Ts>
-  inline friend constexpr typename tuple_element<I, tuple<Ts...>>::type &&
-  get(tuple<Ts...> &&) noexcept;
+  friend constexpr decltype(auto) get(tuple<Ts...> &&) noexcept;
 
   template <std::size_t I, class... Ts>
-  inline friend constexpr const typename tuple_element<I, tuple<Ts...>>::type &
-  get(const tuple<Ts...> &) noexcept;
+  friend constexpr decltype(auto) get(const tuple<Ts...> &) noexcept;
 
   template <std::size_t I, class... Ts>
-  inline friend constexpr const typename tuple_element<I, tuple<Ts...>>::type &&
-  get(const tuple<Ts...> &&) noexcept;
+  friend constexpr decltype(auto) get(const tuple<Ts...> &&) noexcept;
 
 private:
   template <std::size_t... I>
@@ -465,26 +461,22 @@ template <typename... Ts>
 struct _is_tuple<mystd::tuple<Ts...>> : std::true_type {};
 
 template <std::size_t I, class... Types>
-constexpr typename std::tuple_element<I, mystd::tuple<Types...>>::type &
-get(mystd::tuple<Types...> &t) noexcept {
+constexpr decltype(auto) get(mystd::tuple<Types...> &t) noexcept {
   return t.impl.template get<I>();
 }
 
 template <std::size_t I, class... Types>
-constexpr typename std::tuple_element<I, mystd::tuple<Types...>>::type &&
-get(mystd::tuple<Types...> &&t) noexcept {
+constexpr decltype(auto) get(mystd::tuple<Types...> &&t) noexcept {
   return std::move(t.impl.template get<I>());
 }
 
 template <std::size_t I, class... Types>
-constexpr const typename std::tuple_element<I, mystd::tuple<Types...>>::type &
-get(const mystd::tuple<Types...> &t) noexcept {
+constexpr decltype(auto) get(const mystd::tuple<Types...> &t) noexcept {
   return t.impl.template get<I>();
 }
 
 template <std::size_t I, class... Types>
-constexpr const typename std::tuple_element<I, mystd::tuple<Types...>>::type &&
-get(const mystd::tuple<Types...> &&t) noexcept {
+constexpr decltype(auto) get(const mystd::tuple<Types...> &&t) noexcept {
   return std::move(t.impl.template get<I>());
 }
 
@@ -521,28 +513,28 @@ inline constexpr std::size_t _index_of_type_v =
     _index_of_type<T, Types...>::value;
 
 template <class T, class... Types>
-constexpr T &get(mystd::tuple<Types...> &t) noexcept
+constexpr decltype(auto) get(mystd::tuple<Types...> &t) noexcept
   requires(_count_of_type_v<T, Types...> == 1)
 {
   return get<_index_of_type_v<T, Types...>>(t);
 }
 
 template <class T, class... Types>
-constexpr T &&get(mystd::tuple<Types...> &&t) noexcept
+constexpr decltype(auto) get(mystd::tuple<Types...> &&t) noexcept
   requires(_count_of_type_v<T, Types...> == 1)
 {
   return get<_index_of_type_v<T, Types...>>(std::move(t));
 }
 
 template <class T, class... Types>
-constexpr const T &get(const mystd::tuple<Types...> &t) noexcept
+constexpr decltype(auto)  get(const mystd::tuple<Types...> &t) noexcept
   requires(_count_of_type_v<T, Types...> == 1)
 {
   return get<_index_of_type_v<T, Types...>>(t);
 }
 
 template <class T, class... Types>
-constexpr const T &&get(const mystd::tuple<Types...> &&t) noexcept
+constexpr decltype(auto)  get(const mystd::tuple<Types...> &&t) noexcept
   requires(_count_of_type_v<T, Types...> == 1)
 {
   return get<_index_of_type_v<T, Types...>>(std::move(t));
@@ -615,9 +607,9 @@ template <class T1, class T2> constexpr auto _tuple_cat_two(T1 &&t1, T2 &&t2) {
   return _tuple_cat_two_impl(
       std::forward<T1>(t1), std::forward<T2>(t2),
       std::make_index_sequence<
-          std::tuple_size<std::remove_reference_t<T1>>::value>{},
+          std::tuple_size<std::remove_cvref_t<T1>>::value>{},
       std::make_index_sequence<
-          std::tuple_size<std::remove_reference_t<T2>>::value>{});
+          std::tuple_size<std::remove_cvref_t<T2>>::value>{});
 }
 
 template <class T> constexpr auto _tuple_cat_impl(T &&t) {
