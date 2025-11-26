@@ -466,6 +466,21 @@ tuple(std::allocator_arg_t, Alloc, tuple<UTypes...>) -> tuple<UTypes...>;
 template <typename... Ts>
 struct _is_tuple<mystd::tuple<Ts...>> : std::true_type {};
 
+template <class... Types>
+struct tuple_size<mystd::tuple<Types...>>
+    : std::integral_constant<std::size_t, sizeof...(Types)> {};
+
+template <std::size_t I, class Head, class... Tail>
+struct tuple_element<I, mystd::tuple<Head, Tail...>>
+    : mystd::tuple_element<I - 1, mystd::tuple<Tail...>> {
+  static_assert(I < sizeof...(Tail) + 1, "Index out of bounds");
+};
+
+template <class Head, class... Tail>
+struct tuple_element<0, mystd::tuple<Head, Tail...>> {
+  using type = Head;
+};
+
 template <std::size_t I, class... Types>
 constexpr typename mystd::tuple_element<I, mystd::tuple<Types...>>::type &
 get(mystd::tuple<Types...> &t) noexcept {
@@ -563,8 +578,12 @@ template <std::size_t... I>
 constexpr auto tuple<Types...>::compare_spaceship(const tuple &a,
                                                   const tuple &b,
                                                   std::index_sequence<I...>) {
-  auto result = std::strong_ordering::equal;
-  ((result = (result == 0 ? (mystd::get<I>(a) <=> mystd::get<I>(b)) : result)),
+  using common_ordering =
+      std::common_type_t<decltype(mystd::get<I>(a) <=> mystd::get<I>(b))...>;
+  common_ordering result = common_ordering::equivalent;
+  ((result == common_ordering::equivalent
+        ? (result = mystd::get<I>(a) <=> mystd::get<I>(b))
+        : result),
    ...);
   return result;
 }
@@ -598,21 +617,6 @@ template <class... Ts1, class... Ts2, class... Rest>
 struct _tuple_cat_type<mystd::tuple<Ts1...>, mystd::tuple<Ts2...>, Rest...> {
   using type =
       typename _tuple_cat_type<mystd::tuple<Ts1..., Ts2...>, Rest...>::type;
-};
-
-template <class... Types>
-struct tuple_size<mystd::tuple<Types...>>
-    : std::integral_constant<std::size_t, sizeof...(Types)> {};
-
-template <std::size_t I, class Head, class... Tail>
-struct tuple_element<I, mystd::tuple<Head, Tail...>>
-    : mystd::tuple_element<I - 1, mystd::tuple<Tail...>> {
-  static_assert(I < sizeof...(Tail) + 1, "Index out of bounds");
-};
-
-template <class Head, class... Tail>
-struct tuple_element<0, mystd::tuple<Head, Tail...>> {
-  using type = Head;
 };
 
 template <class... Tuples>
@@ -659,3 +663,21 @@ template <class... Types, class Alloc>
 struct uses_allocator<std::tuple<Types...>, Alloc> : std::true_type {};
 
 } // namespace mystd
+
+namespace std {
+template <class... Types>
+struct tuple_size<mystd::tuple<Types...>>
+    : std::integral_constant<std::size_t, sizeof...(Types)> {};
+
+template <std::size_t I, class Head, class... Tail>
+struct tuple_element<I, mystd::tuple<Head, Tail...>>
+    : mystd::tuple_element<I - 1, mystd::tuple<Tail...>> {
+  static_assert(I < sizeof...(Tail) + 1, "Index out of bounds");
+};
+
+template <class Head, class... Tail>
+struct tuple_element<0, mystd::tuple<Head, Tail...>> {
+  using type = Head;
+};
+
+} // namespace std
