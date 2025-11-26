@@ -21,4 +21,7 @@ template <std::size_t I, class T> struct tuple_element<I, const T> {
       typename std::add_const<typename mystd::tuple_element<I, T>::type>::type;
 };
 
+template <std::size_t I, class T>
+using tuple_element_t = typename tuple_element<I, T>::type;
+
 } // namespace mystd
