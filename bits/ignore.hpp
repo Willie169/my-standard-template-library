@@ -3,11 +3,12 @@
 namespace mystd {
 
 struct ignore_t {
-  template <class T> constexpr ignore_t &operator=(const T &) const noexcept {
+  template <class T>
+  constexpr const ignore_t &operator=(const T &) const noexcept {
     return *this;
   }
 
-  template <class T> constexpr ignore_t &operator=(T &&) const noexcept {
+  template <class T> constexpr const ignore_t &operator=(T &&) const noexcept {
     return *this;
   }
 };

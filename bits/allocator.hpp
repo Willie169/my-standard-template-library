@@ -430,16 +430,17 @@ template <class T, class Alloc, class... Args>
 constexpr T make_obj_using_allocator(const Alloc &alloc, Args &&...args) {
   return std::make_from_tuple<T>(mystd::uses_allocator_construction_args<T>(
       alloc, std::forward<Args>(args)...));
+}
 
-  template <class T, class Alloc, class... Args>
-  constexpr T *uninitialized_construct_using_allocator(
-      T * p, const Alloc &alloc, Args &&...args) {
-    return std::apply(
-        [&]<class... Xs>(Xs &&...xs) {
-          return mystd::construct_at(p, std::forward<Xs>(xs)...);
-        },
-        mystd::uses_allocator_construction_args<T>(
-            alloc, std::forward<Args>(args)...));
-  }
+template <class T, class Alloc, class... Args>
+constexpr T *uninitialized_construct_using_allocator(T *p, const Alloc &alloc,
+                                                     Args &&...args) {
+  return std::apply(
+      [&]<class... Xs>(Xs &&...xs) {
+        return std::construct_at(p, std::forward<Xs>(xs)...);
+      },
+      mystd::uses_allocator_construction_args<T>(alloc,
+                                                 std::forward<Args>(args)...));
+}
 
 } // namespace mystd
