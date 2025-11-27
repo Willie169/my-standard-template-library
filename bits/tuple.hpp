@@ -48,14 +48,6 @@ template <std::size_t I> struct _tuple_impl<I> {
   constexpr _tuple_impl &operator=(_tuple_impl &&) noexcept { return *this; }
 
   void swap(_tuple_impl &other) {}
-
-  friend constexpr bool operator==(const _tuple_impl &, const _tuple_impl &) {
-    return true;
-  }
-
-  friend constexpr auto operator<=>(const _tuple_impl &, const _tuple_impl &) {
-    return std::strong_ordering::equal;
-  }
 };
 
 template <std::size_t I, class Head, class... Tail>
@@ -259,31 +251,6 @@ struct _tuple_impl<I, Head, Tail...> : public _tuple_impl<I + 1, Tail...> {
       return static_cast<const base &&>(*this).template get<J>();
     }
   }
-
-  friend constexpr bool operator==(const _tuple_impl &a, const _tuple_impl &b) {
-    if constexpr (sizeof...(Tail) == 0)
-      return a.head == b.head;
-    return static_cast<const base &>(a) == static_cast<const base &>(b) &&
-           a.head == b.head;
-  }
-
-    friend constexpr auto operator<=>(const _tuple_impl &a, const _tuple_impl &b)
-        -> std::conditional_t<
-            sizeof...(Tail) == 0,
-            decltype(a.head <=> b.head),
-            std::common_comparison_category_t<
-                decltype(a.head <=> b.head),
-                decltype(static_cast<const base&>(a) <=> static_cast<const base&>(b))
-            >
-        >
-        requires std::three_way_comparable<Head>
-    {
-        if constexpr (sizeof...(Tail) == 0)
-            return a.head <=> b.head;
-        if (auto cmp = a.head <=> b.head; cmp != 0)
-                return cmp;
-            return static_cast<const base&>(a) <=> static_cast<const base&>(b);
-    }
 };
 
 template <class... Types> class tuple {
@@ -515,10 +482,8 @@ public:
   template <class E1, class E2>
   constexpr tuple &operator=(const std::pair<E1, E2> &p)
     requires(sizeof...(Types) == 2) &&
-            std::is_assignable_v<decltype(this->get<0>()),
-                                 const E1 &> &&
-            std::is_assignable_v<decltype(this->get<1>()),
-                                 const E2 &>
+            std::is_assignable_v<decltype(this -> get<0>()), const E1 &> &&
+            std::is_assignable_v<decltype(this->get<1>()), const E2 &>
   {
     this->get<0>() = p.first;
     this->get<1>() = p.second;
@@ -527,15 +492,11 @@ public:
 
   template <class E1, class E2>
   constexpr tuple &operator=(std::pair<E1, E2> &&p) noexcept(
-      std::is_nothrow_assignable_v<decltype(this->get<0>()),
-                                   E1 &&> &&
-      std::is_nothrow_assignable_v<decltype(this->get<1>()),
-                                   E2 &&>)
+      std::is_nothrow_assignable_v<decltype(this->get<0>()), E1 &&> &&
+      std::is_nothrow_assignable_v<decltype(this->get<1>()), E2 &&>)
     requires(sizeof...(Types) == 2) &&
-            std::is_assignable_v<decltype(this->get<0>()),
-                                 E1 &&> &&
-            std::is_assignable_v<decltype(this->get<1>()),
-                                 E2 &&>
+            std::is_assignable_v<decltype(this -> get<0>()), E1 &&> &&
+            std::is_assignable_v<decltype(this->get<1>()), E2 &&>
   {
     this->get<0>() = std::move(p.first);
     this->get<1>() = std::move(p.second);
@@ -547,9 +508,36 @@ public:
     _impl.swap(other._impl);
   }
 
-  friend constexpr bool operator==(const tuple &a, const tuple &b) = default;
+private:
+  template <std::size_t... I>
+  static constexpr bool tuple_equal_impl(const tuple &a, const tuple &b,
+                                         std::index_sequence<I...>) {
+    return ((a.get<I>() == b.get<I>()) && ...);
+  }
 
-  friend constexpr auto operator<=>(const tuple &a, const tuple &b) = default;
+public:
+  friend constexpr bool operator==(const tuple &a, const tuple &b) {
+    return tuple_equal_impl(a, b, std::make_index_sequence<sizeof...(Types)>{});
+  }
+
+private:
+  template <std::size_t... I>
+  static constexpr auto tuple_three_way_impl(const tuple &a, const tuple &b,
+                                             std::index_sequence<I...>)
+      -> std::common_comparison_category_t<decltype(a.get<I>() <=>
+                                                    b.get<I>())...> {
+    using result_t = std::common_comparison_category_t<decltype(a.get<I>() <=>
+                                                                b.get<I>())...>;
+    result_t result = result_t::equal;
+    ((result = (result != 0 ? result : (a.get<I>() <=> b.get<I>()))), ...);
+    return result;
+  }
+
+public:
+  friend constexpr auto operator<=>(const tuple &a, const tuple &b) {
+    return tuple_three_way_impl(a, b,
+                                std::make_index_sequence<sizeof...(Types)>{});
+  }
 };
 
 template <> class tuple<> {
