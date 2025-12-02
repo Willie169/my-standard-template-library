@@ -25,7 +25,9 @@ public:
   Container c;
 
   constexpr size_type size() const noexcept { return c.size(); }
-  constexpr difference_type ssize() const noexcept { return static_cast<difference_type>(c.size()); }
+  constexpr difference_type ssize() const noexcept {
+    return static_cast<difference_type>(c.size());
+  }
   constexpr bool empty() const noexcept { return c.size() == 0; }
 
 private:
@@ -74,7 +76,9 @@ public:
     return *this;
   }
 
-  void swap(circulate &other) noexcept(noexcept(std::swap(c, other.c)) && noexcept(std::swap(start, other.start))) {
+  void
+  swap(circulate &other) noexcept(noexcept(std::swap(c, other.c)) &&
+                                  noexcept(std::swap(start, other.start))) {
     std::swap(c, other.c);
     std::swap(start, other.start);
   }
@@ -107,9 +111,9 @@ public:
 
   constexpr reference front() { return c[start]; }
   constexpr const_reference front() const { return c[start]; }
-  constexpr reference back() { return c[circular_index(c.ssize() - 1)]; }
+  constexpr reference back() { return c[circular_index(ssize() - 1)]; }
   constexpr const_reference back() const {
-    return c[circular_index(c.ssize() - 1)];
+    return c[circular_index(ssize() - 1)];
   }
 
   class iterator {
@@ -290,7 +294,7 @@ public:
   }
 
   friend bool operator==(const circulate &lhs, const circulate &rhs) {
-    return lhs.c == rhs.c && rhs.start == rhs.start;
+    return lhs.c == rhs.c && lhs.start == rhs.start;
   }
 };
 
@@ -302,8 +306,9 @@ circulate(Container, typename Container::size_type = 0)
 
 namespace std {
 template <class T, class Container>
-void swap(extend::circulate<T, Container> &lhs,
-          extend::circulate<T, Container> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
+void swap(
+    extend::circulate<T, Container> &lhs,
+    extend::circulate<T, Container> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
   lhs.swap(rhs);
 }
 } // namespace std
