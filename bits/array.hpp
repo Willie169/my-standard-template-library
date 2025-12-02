@@ -120,7 +120,7 @@ template <class T, std::size_t N>
 constexpr std::compare_three_way_result_t<T>
 operator<=>(const mystd::array<T, N> &lhs, const mystd::array<T, N> &rhs) {
   return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(),
-                                                rhs.begin(), rhs.end());
+                                                rhs.begin(), rhs.end(), std::compare_three_way());
 }
 
 template <std::size_t I, class T, std::size_t N>

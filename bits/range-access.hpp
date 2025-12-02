@@ -20,8 +20,8 @@ template <class T, std::size_t N> constexpr T *begin(T (&array)[N]) noexcept {
 }
 
 template <class C>
-constexpr auto cbegin(const C &c) noexcept(noexcept(std::begin(c)))
-    -> decltype(std::begin(c)) {
+constexpr auto cbegin(const C &c) noexcept(noexcept(mystd::begin(c)))
+    -> decltype(mystd::begin(c)) {
   return c.begin();
 }
 
@@ -38,8 +38,8 @@ template <class T, std::size_t N> constexpr T *end(T (&array)[N]) noexcept {
 }
 
 template <class C>
-constexpr auto cend(const C &c) noexcept(noexcept(std::end(c)))
-    -> decltype(std::end(c)) {
+constexpr auto cend(const C &c) noexcept(noexcept(mystd::end(c)))
+    -> decltype(mystd::end(c)) {
   return c.end();
 }
 
@@ -62,7 +62,7 @@ constexpr std::reverse_iterator<const T *> rbegin(std::initializer_list<T> il) {
 }
 
 template <class C>
-constexpr auto crbegin(const C &c) -> decltype(std::rbegin(c)) {
+constexpr auto crbegin(const C &c) -> decltype(mystd::rbegin(c)) {
   return c.rbegin();
 }
 
@@ -84,7 +84,7 @@ constexpr std::reverse_iterator<const T *> rend(std::initializer_list<T> il) {
   return std::reverse_iterator<const T *>(il.begin());
 }
 
-template <class C> constexpr auto crend(const C &c) -> decltype(std::rend(c)) {
+template <class C> constexpr auto crend(const C &c) -> decltype(mystd::rend(c)) {
   return c.rend();
 }
 

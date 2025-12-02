@@ -1,8 +1,11 @@
 #pragma once // circulate.hpp
 
 #include <algorithm>
+#include <compare>
+#include <cstddef>
 #include <iterator>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace extend {
@@ -20,17 +23,16 @@ public:
 
 public:
   Container c;
-  size_type start = 0;
 
   constexpr size_type size() const noexcept { return c.size(); }
-  constexpr difference_type ssize() const noexcept {
-    return static_cast<difference_type>(c.size());
-  }
+  constexpr difference_type ssize() const noexcept { return static_cast<difference_type>(c.size()); }
   constexpr bool empty() const noexcept { return c.size() == 0; }
 
 private:
+  size_type start = 0;
+
   constexpr size_type circular_index(difference_type i) const noexcept {
-    if (c.size() == 0)
+    if (c.empty())
       return 0;
     difference_type idx = static_cast<difference_type>(start) + i;
     idx %= ssize();
@@ -44,7 +46,7 @@ public:
 
   explicit circulate(Container cont, size_type Start = 0)
       : c(std::move(cont)), start(Start) {
-    if (c.size() != 0)
+    if (!c.empty())
       start %= c.size();
     else
       start = 0;
@@ -72,13 +74,13 @@ public:
     return *this;
   }
 
-  void swap(circulate &other) noexcept(noexcept(std::swap(c, other.c))) {
+  void swap(circulate &other) noexcept(noexcept(std::swap(c, other.c)) && noexcept(std::swap(start, other.start))) {
     std::swap(c, other.c);
     std::swap(start, other.start);
   }
 
   void rotate(difference_type n) noexcept {
-    if (c.size() != 0) {
+    if (!c.empty()) {
       difference_type sz = static_cast<difference_type>(c.size());
       difference_type pos = static_cast<difference_type>(start);
       pos = (pos + n) % sz;
@@ -105,9 +107,9 @@ public:
 
   constexpr reference front() { return c[start]; }
   constexpr const_reference front() const { return c[start]; }
-  constexpr reference back() { return c[circular_index(c.size() - 1)]; }
+  constexpr reference back() { return c[circular_index(c.ssize() - 1)]; }
   constexpr const_reference back() const {
-    return c[circular_index(c.size() - 1)];
+    return c[circular_index(c.ssize() - 1)];
   }
 
   class iterator {
@@ -171,6 +173,9 @@ public:
 
     friend std::strong_ordering operator<=>(const iterator &a,
                                             const iterator &b) noexcept {
+      if (a.circ != b.circ) {
+        return a.circ <=> b.circ;
+      }
       return a.idx <=> b.idx;
     }
   };
@@ -238,6 +243,9 @@ public:
 
     friend std::strong_ordering operator<=>(const const_iterator &a,
                                             const const_iterator &b) noexcept {
+      if (a.circ != b.circ) {
+        return a.circ <=> b.circ;
+      }
       return a.idx <=> b.idx;
     }
 
@@ -248,6 +256,9 @@ public:
 
     friend std::strong_ordering operator<=>(const iterator &a,
                                             const const_iterator &b) noexcept {
+      if (a.circ != b.circ) {
+        return a.circ <=> b.circ;
+      }
       return a.idx <=> b.idx;
     }
   };
@@ -255,11 +266,9 @@ public:
   iterator begin() noexcept { return iterator(this, 0); }
   const_iterator begin() const noexcept { return const_iterator(this, 0); }
   const_iterator cbegin() const noexcept { return const_iterator(this, 0); }
-  iterator end() noexcept { return iterator(this, c.size()); }
-  const_iterator end() const noexcept { return const_iterator(this, c.size()); }
-  const_iterator cend() const noexcept {
-    return const_iterator(this, c.size());
-  }
+  iterator end() noexcept { return iterator(this, ssize()); }
+  const_iterator end() const noexcept { return const_iterator(this, ssize()); }
+  const_iterator cend() const noexcept { return const_iterator(this, ssize()); }
 
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>;
@@ -280,7 +289,9 @@ public:
     return const_reverse_iterator(cbegin());
   }
 
-  friend bool operator==(const circulate &a, const circulate &b) = default;
+  friend bool operator==(const circulate &lhs, const circulate &rhs) {
+    return lhs.c == rhs.c && rhs.start == rhs.start;
+  }
 };
 
 template <class Container>
@@ -291,8 +302,8 @@ circulate(Container, typename Container::size_type = 0)
 
 namespace std {
 template <class T, class Container>
-void swap(circulate<T, Container> &lhs,
-          circulate<T, Container> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
+void swap(extend::circulate<T, Container> &lhs,
+          extend::circulate<T, Container> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
   lhs.swap(rhs);
 }
 } // namespace std
