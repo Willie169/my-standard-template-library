@@ -84,8 +84,7 @@ constexpr std::reverse_iterator<const T *> rend(std::initializer_list<T> il) {
   return std::reverse_iterator<const T *>(il.begin());
 }
 
-template <class C>
-constexpr auto crend(const C &c) -> decltype(mystd::rend(c)) {
+template <class C> constexpr auto crend(const C &c) -> decltype(mystd::rend(c)) {
   return c.rend();
 }
 

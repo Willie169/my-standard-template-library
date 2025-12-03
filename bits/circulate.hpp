@@ -27,9 +27,7 @@ public:
   Container c;
 
   constexpr size_type size() const noexcept { return c.size(); }
-  constexpr difference_type ssize() const noexcept {
-    return static_cast<difference_type>(c.size());
-  }
+  constexpr difference_type ssize() const noexcept { return static_cast<difference_type>(c.size()); }
   constexpr bool empty() const noexcept { return c.size() == 0; }
 
 private:
@@ -78,9 +76,7 @@ public:
     return *this;
   }
 
-  void
-  swap(circulate &other) noexcept(noexcept(mystd::swap(c, other.c)) &&
-                                  noexcept(mystd::swap(start, other.start))) {
+  void swap(circulate &other) noexcept(noexcept(mystd::swap(c, other.c)) && noexcept(mystd::swap(start, other.start))) {
     mystd::swap(c, other.c);
     mystd::swap(start, other.start);
   }
@@ -305,9 +301,8 @@ circulate(Container, typename Container::size_type = 0)
     -> circulate<typename Container::value_type, Container>;
 
 template <class T, class Container>
-void swap(
-    extend::circulate<T, Container> &lhs,
-    extend::circulate<T, Container> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
+void swap(extend::circulate<T, Container> &lhs,
+          extend::circulate<T, Container> &rhs) noexcept(noexcept(lhs.swap(rhs))) {
   lhs.swap(rhs);
 }
 } // namespace mystd
