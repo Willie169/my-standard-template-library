@@ -6,7 +6,8 @@
 #include <stdexcept>
 #include <utility>
 
-#include "range-access.hpp" #include "swap.hpp"
+#include "range-access.hpp"
+#include "swap.hpp"
 #include "vector.hpp"
 
 namespace mystd {
