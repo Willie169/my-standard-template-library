@@ -977,5 +977,6 @@ template <class T, class Allocator>
 constexpr std::strong_ordering
 operator<=>(const mystd::vector<T, Allocator> &lhs,
             const mystd::vector<T, Allocator> &rhs) {
-  return std::lexicographical_compare_three_way(lhs.begin(), lhs.end(), rhs.begin(), rhs.end(), std::compare_three_way());
+  return std::lexicographical_compare_three_way(
+      lhs.begin(), lhs.end(), rhs.begin(), rhs.end(), std::compare_three_way());
 }
