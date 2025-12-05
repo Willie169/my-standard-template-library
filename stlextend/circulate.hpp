@@ -212,7 +212,7 @@ private:
   size_type start = 0;
 
   constexpr size_type circular_index(difference_type i) const noexcept {
-    if (c.empty())
+    if (empty())
       return 0;
     difference_type idx = static_cast<difference_type>(start) + i;
     idx %= ssize();
@@ -224,12 +224,12 @@ private:
 public:
   circulate() = default;
 
-  explicit circulate(Container cont, size_type Start = 0)
-      : c(std::move(cont)), start(Start) {
-    if (!c.empty())
-      start %= c.size();
-    else
+  explicit circulate(Container cont, size_type start_ = 0)
+      : c(std::move(cont)), start(start_) {
+    if (empty())
       start = 0;
+    else
+      start %= c.size();
   }
 
   circulate(const circulate &other) : c(other.c), start(other.start) {}
@@ -261,7 +261,7 @@ public:
   }
 
   void rotate(difference_type n) noexcept {
-    if (!c.empty()) {
+    if (!empty()) {
       difference_type sz = static_cast<difference_type>(c.size());
       difference_type pos = static_cast<difference_type>(start);
       pos = (pos + n) % sz;
@@ -271,8 +271,12 @@ public:
     }
   }
 
-  void set_start(size_type new_start) noexcept {
-    if (!c.empty())
+  constexpr size_type get_start() noexcept { return start; }
+
+  constexpr void set_start(size_type new_start) noexcept {
+    if (empty())
+      start = 0;
+    else
       start = new_start % c.size();
   }
 
